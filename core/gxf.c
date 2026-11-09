@@ -28,6 +28,7 @@ void hv_gxf_reset(HvCpu *cpu, int on) {
     /* SPTM turns SPRR on before it writes the EL1 table, so the table must allow its own code from reset:
        the value SPTM programs (and later checks). */
     if (on) cpu->gxf.sprr_perm[1][0] = cpu->gxf.sprr_perm[1][1] = 0x2020a52a302abaf5ull;
+    if (on) cpu->gxf.impdef[6][12][4] = 1; /* APSTS_EL1.MKEYVld: the pointer-auth master key is valid */
 }
 
 static void flush(HvCpu *cpu) { hv_tlb_flush(cpu); }
@@ -93,6 +94,30 @@ int hv_gxf_read(HvCpu *cpu, uint32_t reg, uint64_t *v) {
     case 10 << 3 | 7: *v = cpu->gxf.far_gl; return 0;
     }
     return -1;
+}
+
+static void impdef_seen(HvCpu *cpu, uint32_t reg, int write, uint64_t v) {
+    static uint8_t seen[1024];
+    uint32_t k = (reg >> 11 & 7) << 7 | (reg >> 3 & 15) << 3 | (reg & 7);
+    if (seen[k] & (1 << write)) return;
+    seen[k] |= (uint8_t)(1 << write);
+    if (cpu->m && cpu->m->log)
+        fprintf(stderr, "gxf: implementation-defined S3_%u_C15_C%u_%u first %s (%llx) at pc %llx el%u\n", reg >> 11 & 7, reg >> 3 & 15,
+                reg & 7, write ? "written" : "read", (unsigned long long)v, (unsigned long long)cpu->pc, cpu->el);
+}
+
+int hv_gxf_impdef_read(HvCpu *cpu, uint32_t reg, uint64_t *v) {
+    if (!cpu->gxf.on || (reg >> 14) != 3 || ((reg >> 7) & 15) != 15) return -1;
+    *v = cpu->gxf.impdef[reg >> 11 & 7][reg >> 3 & 15][reg & 7];
+    impdef_seen(cpu, reg, 0, *v);
+    return 0;
+}
+
+int hv_gxf_impdef_write(HvCpu *cpu, uint32_t reg, uint64_t v) {
+    if (!cpu->gxf.on || (reg >> 14) != 3 || ((reg >> 7) & 15) != 15) return -1;
+    cpu->gxf.impdef[reg >> 11 & 7][reg >> 3 & 15][reg & 7] = v;
+    impdef_seen(cpu, reg, 1, v);
+    return 0;
 }
 
 int hv_gxf_write(HvCpu *cpu, uint32_t reg, uint64_t v) {

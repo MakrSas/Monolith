@@ -2424,6 +2424,12 @@ static NSString *const screen_shaders = @"#include <metal_stdlib>\n"
     if (!frame || frames == frames_shot) return;
     frames_shot = frames;
     char path[1100];
+    if (getenv("HV_PVG_SHOT_RAW")) { /* raw BGRA (prefix-NNNN-WxH.bgra): where the host's ImageIO cannot be trusted */
+        snprintf(path, sizeof path, "%s-%04u-%ux%u.bgra", shot, shots++, frame_w, frame_h);
+        FILE *f = fopen(path, "wb");
+        if (f) fwrite(frame, 4, (size_t)frame_w * frame_h, f), fclose(f);
+        return;
+    }
     snprintf(path, sizeof path, "%s-%04u.png", shot, shots++);
     CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
     CGContextRef ctx = CGBitmapContextCreate(frame, frame_w, frame_h, 8, (size_t)frame_w * 4, cs, (CGBitmapInfo)kCGImageAlphaNoneSkipFirst | kCGBitmapByteOrder32Little);

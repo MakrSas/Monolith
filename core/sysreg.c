@@ -158,6 +158,7 @@ static int read_reg(HvCpu *cpu, uint32_t reg, uint64_t *v) {
         *v = 0;
         return 0;
     }
+    if (hv_gxf_impdef_read(cpu, reg, v) == 0) return 0;
     /* Apple implementation-defined registers (op0 3, CRn 15). The vmapple
        kernel reads error-status registers there (S3_6_C15_C0_0, S3_3_C15_C8_0..)
        when it reports a machine error; zero means no error recorded. */
@@ -267,6 +268,7 @@ other:
     }
     /* Debug and PMU registers: ignored. */
     if ((reg >> 14) == 2 || (((reg >> 7) & 15) == 9 && (reg >> 14) == 3)) return 0;
+    if (hv_gxf_impdef_write(cpu, reg, v) == 0) return 0;
     /* Apple implementation-defined registers (op0 3, CRn 15): ignored, see read_reg. */
     if ((reg >> 14) == 3 && ((reg >> 7) & 15) == 15) {
         if (m->log) fprintf(stderr, "hengevm: write to implementation-defined S3_%u_C15_C%u_%u ignored\n", (reg >> 11) & 7,

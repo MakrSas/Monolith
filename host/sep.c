@@ -161,6 +161,7 @@ int hv_sep_start(HvVmapple *b, const char *rom_path, const char *storage_path, v
     hv_machine_add_ram(&sm, VSTD_BASE, VSTD_SIZE, vstd, 0);
     hv_machine_add_ram(&sm, 0x70000000ull, b->ram_size, b->ram, 0); /* the AP's RAM, shared */
     hv_cfg_attach(&sm, 0x400000ull, b->cfg);                      /* ACFG: sepOS's TRNG reads its random word */
+    if (b->scratch) hv_machine_add_ram(&sm, 0x500000ull, 0x200000, b->scratch, 0); /* avp-scratch, shared (the SEP ROM reads it) */
     sgic = hv_gicv3_create(&sm, 0x10000000ull, 0x10010000ull);
     hv_machine_add_mmio(&sm, VSTR_BASE, 0x4000, NULL, vstr_read, vstr_write, "sep-storage");
     hv_machine_add_mmio(&sm, 0x30220000ull, 0x10000, "sep-dev-30220000", unk_read, unk_write, "sep-dev-30220000");

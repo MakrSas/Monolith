@@ -114,6 +114,7 @@ typedef struct HvCpu {
         uint64_t sprr_config[2];     /* SPRR_CONFIG_EL0/EL1: bit 0 on */
         uint64_t sprr_perm[2][2];    /* [table EL][EL]: 16 four-bit attributes by (AP, UXN, PXN) */
         uint64_t c3_0, mprr[5];
+        uint64_t impdef[8][16][8]; /* other S3_<op1>_C15_<crm>_<op2>: kept as written (vphone-linux's impdef sink) */
     } gxf;
 
     /* The exclusive monitor is excl_addr, excl_size and excl_val above: STXR is a

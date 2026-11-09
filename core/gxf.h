@@ -17,6 +17,9 @@ void hv_gxf_reset(HvCpu *cpu, int on);
 int hv_gxf_read(HvCpu *cpu, uint32_t reg, uint64_t *v);
 int hv_gxf_write(HvCpu *cpu, uint32_t reg, uint64_t v);
 /* May EL0 (TXM at GL0, or user code changing its SPRR table) touch reg? */
+/* Any other S3_*_C15 register on a GXF CPU: kept as written. 0 handled, -1 not a GXF CPU. */
+int hv_gxf_impdef_read(HvCpu *cpu, uint32_t reg, uint64_t *v);
+int hv_gxf_impdef_write(HvCpu *cpu, uint32_t reg, uint64_t v);
 int hv_gxf_el0_allowed(HvCpu *cpu, uint32_t reg);
 /* GENTER, GEXIT: 1 if insn was one (the CPU state is changed and pc set), 0 if not. */
 int hv_gxf_insn(HvCpu *cpu, uint32_t insn, uint64_t pc);
