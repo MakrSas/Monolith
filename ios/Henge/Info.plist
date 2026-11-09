@@ -54,7 +54,7 @@
 			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>henge</string>
+				<string>monolith</string>
 			</array>
 		</dict>
 	</array>

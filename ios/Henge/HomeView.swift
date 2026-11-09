@@ -40,13 +40,14 @@ struct HomeView: View {
                 .deskColumn()
             }
             .background(Desk.page)
-            .navigationTitle("Henge")
+            .navigationTitle("Monolith")
             .navigationDestination(for: VirtualMac.self) { MacSettingsView(mac: $0) }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        Button("Install macOS…") { tab = .install }
-                        Button("Bring in a Mac from a computer…") { picking = true }
+                        Button("Add Apple Watch…", systemImage: "applewatch") { picking = true }
+                        Button("Install macOS…", systemImage: "macwindow") { tab = .install }
+                        Button("Bring in a machine from a folder…", systemImage: "folder") { picking = true }
                     } label: {
                         Image(systemName: "plus")
                     }
@@ -91,11 +92,15 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 190)
                 .background(Desk.raised.opacity(0.5), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            Text("No Mac yet").font(.system(size: 24, weight: .bold))
-            Text("Install macOS on this \(Device.name), or bring in a Mac made on a computer.")
+            Text("Nothing here yet").font(.system(size: 24, weight: .bold))
+            Text("Add an Apple Watch, install macOS on this \(Device.name), or bring in a machine made on a computer.")
                 .font(.system(size: 15)).foregroundStyle(Desk.dim).multilineTextAlignment(.center)
-            Button("Install macOS") { tab = .install }.buttonStyle(DeskButtonStyle())
-            Button("Bring in a Mac") { picking = true }
+            Button("Add Apple Watch") { picking = true }.buttonStyle(DeskButtonStyle())
+            Text("Pick the Apple Watch folder made on a Mac (tools/export_vphone.sh), from Files or a USB drive.")
+                .font(.system(size: 13)).foregroundStyle(Desk.dim).multilineTextAlignment(.center)
+            Button("Install macOS") { tab = .install }
+                .font(.system(size: 15, weight: .semibold)).foregroundStyle(Desk.accentLight)
+            Button("Bring in a machine from a folder") { picking = true }
                 .font(.system(size: 15, weight: .semibold)).foregroundStyle(Desk.accentLight)
         }
         .padding(14)

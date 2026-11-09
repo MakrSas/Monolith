@@ -1,6 +1,6 @@
 name: Henge
 options:
-  bundleIdPrefix: com.henge
+  bundleIdPrefix: com.monolith
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -8,7 +8,7 @@ options:
 settings:
   base:
     # The app and its JIT helper follow this together (the helper's id sits under the app's).
-    HENGE_BUNDLE_IDENTIFIER: com.henge.app
+    HENGE_BUNDLE_IDENTIFIER: com.monolith.app
     # The app's entitlements file. Override on the xcodebuild command line (the JIT helper doesn't use it, so a
     # personal team can sign the app with fewer entitlements without touching the helper).
     HENGE_ENTITLEMENTS: Henge/Henge.entitlements

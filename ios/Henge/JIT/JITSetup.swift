@@ -491,7 +491,7 @@ final class JITCoordinator: ObservableObject {
 enum LocalDevVPN {
     static let appStore = URL(string: "https://apps.apple.com/us/app/localdevvpn/id6755608044")!
     /// `enable` connects the VPN; `scheme` has LocalDevVPN return to Henge afterwards.
-    static let connect = URL(string: "localdevvpn://enable?scheme=henge")!
+    static let connect = URL(string: "localdevvpn://enable?scheme=monolith")!
 
     static var isInstalled: Bool { UIApplication.shared.canOpenURL(URL(string: "localdevvpn://")!) }
 
