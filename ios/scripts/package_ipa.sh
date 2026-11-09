@@ -9,8 +9,8 @@ set -e
 IOS="$(cd "$(dirname "$0")/.." && pwd)"
 TROLLSTORE=false
 [ "$1" = "--trollstore" ] && TROLLSTORE=true
-OUT="$HOME/Desktop/Henge.ipa"
-[ "$TROLLSTORE" = true ] && OUT="$HOME/Desktop/Henge.tipa"
+OUT="$HOME/Desktop/Monolith.ipa"
+[ "$TROLLSTORE" = true ] && OUT="$HOME/Desktop/Monolith.tipa"
 [ -d "$IOS/deps/StikJIT.xcframework" ] || "$IOS/scripts/fetch_deps.sh"
 cd "$IOS"
 xcodegen generate >/dev/null

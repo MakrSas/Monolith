@@ -36,16 +36,18 @@ targets:
       - path: Henge/Resources
         buildPhase: resources
       # Icon Composer's document: the app icon, which iOS renders in Liquid Glass.
-      - path: Henge/AppIcon.icon
-        type: file
-        buildPhase: resources
+      # TEMPORARY: off while Xcode 27.1's actool crashes (SIGBUS in ImageIO) on any image;
+      # flat PNGs in Henge/Resources + CFBundleIcons in Info.plist stand in. Revert both.
+      # - path: Henge/AppIcon.icon
+      #   type: file
+      #   buildPhase: resources
       # The messages the app and its JIT helper exchange.
       - path: HengeJITHelper/HengeJITMessages.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(HENGE_BUNDLE_IDENTIFIER)
         PRODUCT_NAME: Henge
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""  # TEMPORARY, was AppIcon
         CODE_SIGN_STYLE: Automatic
         INFOPLIST_FILE: Henge/Info.plist
         CODE_SIGN_ENTITLEMENTS: $(HENGE_ENTITLEMENTS)
