@@ -26,6 +26,10 @@ struct VirtualMac: Identifiable, Codable, Hashable {
     var rom: URL { directory.appendingPathComponent("AVPBooter.vmapple2.bin") }
     var disk: URL { directory.appendingPathComponent("disk.img") }
     var aux: URL { directory.appendingPathComponent("auxiliary.bin") }
+    /// A vresearch101 guest (watchOS, iOS... from vphone-cli): its SEP core's boot ROM and storage, when there.
+    var sepROM: URL { directory.appendingPathComponent("OpenSEP.bin") }
+    var sepStorage: URL { directory.appendingPathComponent("SEPStorage") }
+    var isResearch: Bool { FileManager.default.fileExists(atPath: sepROM.path) }
 }
 
 /// How much RAM a Mac gets. The engine first asks the kernel to leave it out of Henge's footprint,
@@ -164,7 +168,7 @@ final class Machines: ObservableObject {
             let fm = FileManager.default
             try fm.createDirectory(at: dest, withIntermediateDirectories: true)
             excludeFromBackup()
-            for name in ["AVPBooter.vmapple2.bin", "auxiliary.bin", "machine.json", "disk.img"] {
+            for name in ["AVPBooter.vmapple2.bin", "auxiliary.bin", "machine.json", "disk.img", "OpenSEP.bin", "SEPStorage"] {
                 let from = folder.appendingPathComponent(name)
                 guard fm.fileExists(atPath: from.path) else { continue }
                 if move { try fm.moveItem(at: from, to: dest.appendingPathComponent(name)) }

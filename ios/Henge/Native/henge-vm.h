@@ -27,6 +27,8 @@ int henge_vm_state(void);
 /* Why it stopped (an HV_EXIT_* name), once state is 2. */
 const char *henge_vm_exit_reason(void);
 void henge_vm_stop(void);
+/* A vresearch101 guest (Monolith): its SEP boot ROM and storage file. Before henge_vm_boot. */
+void henge_vm_set_sep(const char *rom, const char *storage);
 /* Testing: sets a translation knob (core/machine.h) in the running machine; nonzero if it exists. */
 int henge_vm_knob(const char *name, int value);
 /* The memory balloon (only with HV_BALLOON set before boot): asks the guest to hand over target_mb (when >= 0)

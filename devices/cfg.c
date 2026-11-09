@@ -125,3 +125,7 @@ uint8_t *hv_cfg_create(HvMachine *m, uint64_t pa, const HvCfgParams *p) {
     hv_machine_add_ram(m, pa + CFG_SIZE, CFG_WINDOW - CFG_SIZE, mem + CFG_SIZE, 0);
     return mem;
 }
+
+void hv_cfg_attach(HvMachine *m, uint64_t pa, uint8_t *mem) {
+    hv_machine_add_mmio(m, pa, CFG_WINDOW, mem, cfg_read, cfg_write, "cfg");
+}

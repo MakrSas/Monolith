@@ -21,5 +21,7 @@ typedef struct HvCfgParams {
 
 /* Returns the host copy of the region (64 KB). */
 uint8_t *hv_cfg_create(HvMachine *m, uint64_t pa, const HvCfgParams *p);
+/* The same region (and random word) on another machine: vresearch101's SEP core. */
+void hv_cfg_attach(HvMachine *m, uint64_t pa, uint8_t *mem);
 
 #endif

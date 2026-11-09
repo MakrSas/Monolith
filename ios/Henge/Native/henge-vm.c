@@ -30,6 +30,15 @@ static void on_exit(int reason) {
     fprintf(stderr, "henge: the machine stopped (%s)\n", hv_vm_reason_name(reason));
 }
 
+static char *sep_rom, *sep_storage;
+
+void henge_vm_set_sep(const char *rom, const char *storage) {
+    free(sep_rom), free(sep_storage);
+    sep_rom = rom ? strdup(rom) : NULL;
+    sep_storage = storage ? strdup(storage) : NULL;
+    setenv("HV_MACHINE", "vresearch101", 1);
+}
+
 int henge_vm_boot(const char *rom, const char *disk, const char *aux, uint64_t ecid, uint64_t seed, uint64_t ram_mb,
                   int cpus, char *err, size_t errlen) {
     { extern void hv_prof_ios_start(void); hv_prof_ios_start(); }
@@ -43,7 +52,7 @@ int henge_vm_boot(const char *rom, const char *disk, const char *aux, uint64_t e
         return -1;
     }
     HvVmConfig c = {.rom = rom, .disk = disk, .aux = aux, .ecid = ecid, .seed = seed, .ram_mb = ram_mb, .ncpus = cpus, .log = 1,
-                    .jit_rx = jit->rx_addr, .jit_rw = jit->rw_addr, .jit_bytes = jit->size};
+                    .jit_rx = jit->rx_addr, .jit_rw = jit->rw_addr, .jit_bytes = jit->size, .sep_rom = sep_rom, .sep_storage = sep_storage};
     fprintf(stderr, "henge: booting with %d CPUs, %llu MB RAM, a %zu MB JIT region\n", cpus, (unsigned long long)ram_mb,
             jit->size >> 20);
     if (hv_vm_create(&c, err, errlen) != 0) return -1;

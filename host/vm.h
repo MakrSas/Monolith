@@ -23,6 +23,8 @@ typedef struct HvVmConfig {
     /* JIT memory the host already has (iOS: granted by a debugger), or NULL to map it here. */
     void *jit_rx, *jit_rw;
     size_t jit_bytes;         /* 0: 768 MB */
+    /* vresearch101 (HV_MACHINE=vresearch101): the SEP's boot ROM and its storage file. */
+    const char *sep_rom, *sep_storage;
 } HvVmConfig;
 
 /* Returns 0, or -1 with a reason in err. */

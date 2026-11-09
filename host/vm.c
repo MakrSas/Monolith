@@ -1,3 +1,4 @@
+#include "sep.h"
 #include "vm.h"
 #include "pvg_lite.h"
 
@@ -235,6 +236,8 @@ int hv_vm_create(const HvVmConfig *c, char *err, size_t errlen) {
     if (hv_disk_open(&aux, c->aux, c->aux_offset ? c->aux_offset : 16384, 0) != 0)
         return fail(err, errlen, "Cannot open the auxiliary storage.");
     size_t jit = c->jit_bytes ? c->jit_bytes : (size_t)768 << 20;
+    size_t sep_jit = c->sep_rom ? (size_t)64 << 20 : 0; /* the SEP core's share of the JIT space, from its end */
+    jit -= sep_jit;
     int r = c->jit_rx ? hv_machine_init_jit(&m, c->jit_rx, c->jit_rw, jit) : hv_machine_init(&m, jit);
     if (r != 0) return fail(err, errlen, "Cannot set up the JIT region.");
     m.log = c->log;
@@ -254,6 +257,10 @@ int hv_vm_create(const HvVmConfig *c, char *err, size_t errlen) {
         return fail(err, errlen, "Cannot build the machine (not enough memory for the guest's RAM?).");
     if (hv_vmapple_load_rom(&board, c->rom) != 0) return fail(err, errlen, "Cannot read the ROM (AVPBooter.vmapple2.bin).");
     hv_vmapple_reset_cpu(&board);
+    if (board.research && c->sep_rom &&
+        hv_sep_start(&board, c->sep_rom, c->sep_storage, c->jit_rx ? (char *)c->jit_rx + jit : NULL,
+                     c->jit_rw ? (char *)c->jit_rw + jit : NULL, sep_jit) != 0)
+        return fail(err, errlen, "Cannot start the SEP core.");
     if (board.net && !c->no_net) {
         if (hv_net_attach(&m, board.net) != 0) fprintf(stderr, "hengevm: user-mode network unavailable\n");
         else net_on = 1;
@@ -354,6 +361,7 @@ void hv_vm_start(int cpu0, void (*on_exit)(int reason)) {
 
 void hv_vm_stop(void) {
     for (int i = 0; i < ncpus; i++) cpus[i].halted = 3; /* the dispatchers stop at the next block */
+    hv_sep_stop();
     hv_machine_kick_all(&m);
     for (int i = 0; i < ncpus; i++) hv_cpu_wake(&cpus[i]);
 }
