@@ -156,3 +156,51 @@ struct DigitalCrown: View {
         }
     }
 }
+
+/// A TV remote for tvOS guests: a click pad (swipe to move, tap to select), Back, TV/Home and Play/Pause.
+/// The pad's moves and Select are the keyboard's arrows and Return, Back its Escape, as vphone's remote is.
+struct TVRemote: View {
+    private let feedback = UIImpactFeedbackGenerator(style: .light)
+    @State private var start: CGPoint?
+
+    private func key(_ usage: UInt8) {
+        henge_vm_key_hid(usage, 1)
+        henge_vm_key_hid(usage, 0)
+        feedback.impactOccurred()
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle().fill(Color(white: 0.16))
+                Circle().stroke(Color.white.opacity(0.12), lineWidth: 1)
+                Image(systemName: "circle.fill").font(.system(size: 10)).foregroundStyle(.white.opacity(0.25))
+            }
+            .aspectRatio(1, contentMode: .fit)
+            .contentShape(Circle())
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { g in if start == nil { start = g.startLocation } }
+                .onEnded { g in
+                    let dx = g.translation.width, dy = g.translation.height
+                    start = nil
+                    if max(abs(dx), abs(dy)) < 18 { key(0x28); return } // tap: Select
+                    if abs(dx) > abs(dy) { key(dx > 0 ? 0x4f : 0x50) } else { key(dy > 0 ? 0x51 : 0x52) }
+                })
+            .accessibilityLabel("Touch surface: swipe to move, tap to select")
+            VStack(spacing: 10) {
+                remoteButton("chevron.backward", "Back") { key(0x29) }
+                remoteButton("tv", "TV") { henge_vm_button(0, 1); henge_vm_button(0, 0) }
+                remoteButton("playpause.fill", "Play/Pause") { henge_vm_button(5, 1); henge_vm_button(5, 0) }
+            }
+        }
+        .padding(12)
+    }
+
+    private func remoteButton(_ symbol: String, _ label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 18, weight: .semibold)).foregroundStyle(.white)
+                .frame(width: 52, height: 52).background(Color(white: 0.2), in: Circle())
+        }
+        .accessibilityLabel(label)
+    }
+}

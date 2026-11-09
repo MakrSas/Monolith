@@ -406,8 +406,8 @@ void hv_vm_touch(int finger, int down, double x, double y) { hv_usbx_touch(board
    1 a watch's side button (Help), 2 volume up, 3 volume down, 4 power (sleep, wake). Power also pulls the
    power-button GPIO line (pin 3), which is how a shutdown request reaches the guest. */
 void hv_vm_button(int which, int down) {
-    static const uint16_t usage[] = {0x40, 0x95, 0xe9, 0xea, 0x30};
-    if (which < 0 || which > 4) return;
+    static const uint16_t usage[] = {0x40, 0x95, 0xe9, 0xea, 0x30, 0xcd}; /* 5: Play/Pause (a TV remote) */
+    if (which < 0 || which > 5) return;
     hv_usbx_consumer(board.usbx, usage[which], down);
     if (which == 4 && board.gpio) hv_pl061_set_input(board.gpio, 3, down);
 }

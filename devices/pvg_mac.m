@@ -517,7 +517,9 @@ int hv_pvg_attach(HvVmapple *b, const char *screenshot) {
             if (window_layer) present();
         };
         pgdisp = [pgdev newDisplayWithDescriptor:dd port:0 serialNum:1];
-        PGDisplayMode *mode = [[PGDisplayMode alloc] initWithSizeInPixels:(PGDisplayCoord_t){1920, 1080}
+        unsigned dw = 1920, dh = 1080; /* HV_DISPLAY=WxH: another screen (a watch's 416x496) */
+        if (getenv("HV_DISPLAY")) sscanf(getenv("HV_DISPLAY"), "%ux%u", &dw, &dh);
+        PGDisplayMode *mode = [[PGDisplayMode alloc] initWithSizeInPixels:(PGDisplayCoord_t){(uint16_t)dw, (uint16_t)dh}
                                                          refreshRateInHz:60];
         pgdisp.modeList = @[ mode ];
     }
@@ -548,6 +550,13 @@ static const uint16_t keymap[128] = {
 
 static void key(uint16_t mac, int down) {
     if (mac >= 128 || !keymap[mac]) return;
+    if (board->usbx) { /* vresearch101: F1 Home/crown, F2 side, F3 power, F4/F5 volume; the rest to its keyboard */
+        static const uint16_t fkeys[] = {0x7a, 0x78, 0x63, 0x76, 0x60, 0x61}; /* F1..F6: Home/Menu, side, power, volume +/-, Play/Pause */
+        for (int i = 0; i < 6; i++)
+            if (mac == fkeys[i]) { hv_usbx_consumer(board->usbx, (uint16_t[]){0x40, 0x95, 0x30, 0xe9, 0xea, 0xcd}[i], down); return; }
+        hv_usbx_key(board->usbx, hv_xhci_linux_to_hid(keymap[mac]), down);
+        return;
+    }
     hv_xhci_key_linux(board->usb, keymap[mac], down); /* the USB keyboard: the one macOS listens to */
     hv_virtio_input_send(board->keyboard, HV_EV_KEY, keymap[mac], down);
     hv_virtio_input_send(board->keyboard, HV_EV_SYN, 0, 0);
@@ -607,7 +616,14 @@ static void key(uint16_t mac, int down) {
     }
 }
 
+/* vresearch101: the window is the guest's touch screen; the mouse is a finger. */
+- (void)touch:(NSEvent *)e down:(int)down {
+    NSPoint p = [self convertPoint:e.locationInWindow fromView:nil];
+    NSSize s = self.bounds.size;
+    if (s.width > 0 && s.height > 0) hv_usbx_touch(board->usbx, 0, down, p.x / s.width, 1 - p.y / s.height);
+}
 - (void)moved:(NSEvent *)e {
+    if (board->usbx) { if (e.type == NSEventTypeLeftMouseDragged) [self touch:e down:1]; return; }
     if (!self.captured) return;
     int dx = (int)lround(e.deltaX), dy = (int)lround(e.deltaY);
     if (!dx && !dy) return;
@@ -624,6 +640,7 @@ static void key(uint16_t mac, int down) {
 - (void)rightMouseDragged:(NSEvent *)e { [self moved:e]; }
 - (void)otherMouseDragged:(NSEvent *)e { [self moved:e]; }
 - (void)mouseDown:(NSEvent *)e {
+    if (board->usbx) { [self touch:e down:1]; return; }
     if (!self.captured) { /* the first click only takes the mouse */
         [self setCapture:YES];
         return;
@@ -631,6 +648,7 @@ static void key(uint16_t mac, int down) {
     [self button:HV_BTN_LEFT down:1];
 }
 - (void)mouseUp:(NSEvent *)e {
+    if (board->usbx) { [self touch:e down:0]; return; }
     if (self.captured) [self button:HV_BTN_LEFT down:0];
 }
 - (void)rightMouseDown:(NSEvent *)e {
@@ -646,6 +664,14 @@ static void key(uint16_t mac, int down) {
     if (self.captured) [self button:HV_BTN_MIDDLE down:0];
 }
 - (void)scrollWheel:(NSEvent *)e {
+    if (board->usbx) { /* the Digital Crown */
+        static double acc;
+        acc += e.hasPreciseScrollingDeltas ? e.scrollingDeltaY / 8.0 : e.scrollingDeltaY;
+        int n = (int)acc;
+        acc -= n;
+        if (n) hv_usbx_wheel(board->usbx, n);
+        return;
+    }
     if (!self.captured) return;
     /* Wheel clicks; trackpads give fine deltas, so gather them into whole steps. */
     static double acc_y, acc_x;

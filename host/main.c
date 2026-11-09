@@ -324,7 +324,7 @@ static void *tap_thread(void *unused) {
             hv_vm_button(b, 1), usleep(150000), hv_vm_button(b, 0);
         } else {
             fprintf(stderr, "hengevm: tap (%d,%d)/1000 at %ld s\n", x, y, (long)(time(NULL) - start));
-            hv_vm_touch(0, 1, x / 1000.0, y / 1000.0), usleep(80000), hv_vm_touch(0, 0, x / 1000.0, y / 1000.0);
+            hv_vm_touch(0, 1, x / 1000.0, y / 1000.0), usleep(250000), hv_vm_touch(0, 0, x / 1000.0, y / 1000.0);
         }
     }
     return NULL;

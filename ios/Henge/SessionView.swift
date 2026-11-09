@@ -289,7 +289,18 @@ struct SessionView: View {
             .position(x: layout.pad.midX, y: layout.toolsY + 27)
             .transition(.opacity)
         }
-        if mac.isResearch { buttonsPanel(layout) } else { trackpadPanel(layout) }
+        if mac.isResearch && mac.screen.width >= 1280 { remotePanel(layout) }
+        else if mac.isResearch { buttonsPanel(layout) } else { trackpadPanel(layout) }
+    }
+
+    /// A TV guest: the remote.
+    private func remotePanel(_ layout: Layout) -> some View {
+        TVRemote()
+            .background(Desk.card)
+            .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(Desk.hairline, lineWidth: 0.5))
+            .frame(width: layout.pad.width, height: min(layout.pad.height, 240))
+            .position(x: layout.pad.midX, y: layout.pad.minY + min(layout.pad.height, 240) / 2)
     }
 
     /// A watch or phone guest: its screen takes touches itself, and its buttons go here.

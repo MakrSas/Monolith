@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "machine.h"
 
@@ -18,7 +19,7 @@
 #define XECP 0x800
 #define BAR_SIZE 0x4000
 #define SLOTS 8
-#define PORTS 3 /* keyboard, touch screen, buttons on root ports 1-3; or (HV_USBX_HUB) the hub on port 2 with both behind it */
+#define PORTS 10 /* keyboard, touch screen, buttons on root ports 1-3; or (HV_USBX_HUB) the hub on port 2 with both behind it */
 #define INTRS 4
 #define EPS 32
 #define QLEN 256
@@ -102,7 +103,7 @@ static const uint8_t kbd_report[] = {
 static const uint8_t touch_report[] = {0x05, 0x0d, 0x09, 0x04, 0xa1, 0x01, FINGER, FINGER, FINGER, FINGER, 0xc0};
 #define TOUCH_LEN 20
 
-static const uint8_t kbd_dev[18] = {18, 1, 0x00, 0x02, 0, 0, 0, 64, 0xac, 0x05, 0x20, 0x02, 0x00, 0x01, 1, 2, 3, 1};
+static const uint8_t kbd_dev[18] = {18, 1, 0x00, 0x02, 0, 0, 0, 64, 0xac, 0x05, 0x05, 0x81, /* VZ's 0x8105 */ 0x00, 0x01, 1, 2, 3, 1};
 static const uint8_t kbd_cfg[34] = {
     9, 2, 34, 0, 1, 1, 0, 0xa0, 50, 9, 4, 0, 0, 1, 3, 1, 1, 0,
     9, 0x21, 0x11, 0x01, 0, 1, 0x22, sizeof kbd_report, 0, 7, 5, 0x81, 3, 8, 0, 10,
@@ -363,6 +364,7 @@ static void run_in(HvUsbx *x, int d) {
         if (((trb[3] >> 10) & 0x3f) != TRB_NORMAL) continue;
         uint64_t buf = (uint64_t)trb[1] << 32 | trb[0];
         uint32_t want = trb[2] & 0x1ffff, n = want < (uint32_t)dv->rlen ? want : (uint32_t)dv->rlen;
+        if (xlog()) fprintf(stderr, "usbx: dev %d report %u bytes delivered\n", d, n);
         wr(x, buf, dv->q[dv->qh++ % QLEN], n);
         x->delivered++;
         xfer_event(x, at, n < want ? CC_SHORT_PACKET : CC_SUCCESS, want - n, dv->slot, DCI_IN);
@@ -387,9 +389,8 @@ static int address_device(HvUsbx *x, int slot, uint64_t input, int bsr) {
     memcpy(&dw0, sc, 4);
     int port = sc[6], route = (int)(dw0 & 0xfffff);
     int d = -1;
-    if (port == 1 && !route) d = KBD;
-    else if (x->hub_mode) d = port == 2 && !route ? HUB : port == 2 && route == 1 ? TOUCH : port == 2 && route == 2 ? CONS : -1;
-    else d = port == 2 && !route ? TOUCH : port == 3 && !route ? CONS : -1;
+    if (x->hub_mode) d = port == 1 && !route ? KBD : port == 2 && !route ? HUB : port == 2 && route == 1 ? TOUCH : port == 2 && route == 2 ? CONS : -1;
+    else d = route ? -1 : port == 10 ? TOUCH : port == 9 ? KBD : port == 8 ? CONS : -1; /* Virtualization.framework's ports: touch screen @0ca00000, keyboard @0c900000 */
     if (xlog()) fprintf(stderr, "usbx: address slot %d port %d route %x -> dev %d\n", slot, port, route, d);
     if (d < 0) return CC_TRB_ERROR;
     uint32_t dw3 = (uint32_t)(bsr ? 1 : 2) << 27 | (uint32_t)(bsr ? 0 : slot);
@@ -546,7 +547,7 @@ static void reset(HvUsbx *x) {
     }
     for (int i = 0; i < 2; i++) x->hub_status[i] = 0x101, x->hub_change[i] = 0x1;
     x->hub_reported = 0;
-    for (int p = 0; p < PORTS; p++) x->portsc[p] = x->hub_mode && p == 2 ? PORT_PP : connected();
+    for (int p = 0; p < PORTS; p++) x->portsc[p] = (x->hub_mode ? p < 2 : p >= 7) ? connected() : PORT_PP;
     update_irq(x);
 }
 
@@ -667,6 +668,7 @@ static void bar_write(HvPciDev *pd, int bar, uint64_t off, uint64_t v, unsigned 
         if (st == 2) return;
         if (st != 1) set_ep_state(x, slot, dci, 1);
         dv->running[dci] = 1;
+        if (xlog() && dci != 1) fprintf(stderr, "usbx: doorbell slot %d dci %d (dev %d)\n", slot, dci, (int)(dv - x->dev));
         if (dci == 1) run_ep0(x, slot);
         else if (dci == DCI_IN) run_in(x, (int)(dv - x->dev));
     }
@@ -747,8 +749,29 @@ void hv_usbx_wheel(HvUsbx *x, int detents) {
 
 uint64_t hv_usbx_delivered(HvUsbx *x) { return x ? x->delivered : 0; }
 
+static uint64_t now_us(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000;
+}
+
 void hv_usbx_poll(HvUsbx *x) {
     if (!x) return;
+    /* A digitizer reports at its polling rate while a finger is down, not only when it moves. */
+    static uint64_t last;
+    uint64_t t = now_us();
+    if (t - last >= 8000) {
+        last = t;
+        pthread_mutex_lock(&x->mu);
+        int any = 0;
+        for (int i = 0; i < 4; i++) any |= x->finger[i].down;
+        if (any && x->dev[TOUCH].qh == x->dev[TOUCH].qt) {
+            uint8_t rep[TOUCH_LEN];
+            touch_report_now(x, rep);
+            push(x, TOUCH, rep);
+        }
+        pthread_mutex_unlock(&x->mu);
+    }
     for (int d = 0; d < NDEV; d++)
         if (x->dev[d].qh != x->dev[d].qt || (d == HUB && (x->hub_change[0] || x->hub_change[1]) && !x->hub_reported)) run_in(x, d);
 }
@@ -768,7 +791,9 @@ HvUsbx *hv_usbx_create(HvMachine *m, HvPcie *bus) {
     hv_pci_add_bar(&x->pci, 0, BAR_SIZE, 1);
     x->pci.config[0x60] = 0x30;
     x->pci.config[0x61] = 0x20;
-    if (hv_pcie_attach(bus, &x->pci) < 0) {
+    /* Virtualization.framework's slot for it (AppleUSBXHCIPCI@0c000000): the guest's device tree may know it there. */
+    if (12 < HV_PCI_SLOTS && !bus->dev[12]) bus->dev[12] = &x->pci, x->pci.bus = bus, x->pci.slot = 12;
+    else if (hv_pcie_attach(bus, &x->pci) < 0) {
         free(x);
         return NULL;
     }
