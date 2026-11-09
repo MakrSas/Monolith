@@ -305,6 +305,31 @@ static void *click_thread(void *unused) {
     return NULL;
 }
 
+/* Debugging, vresearch101: HV_TAPS="seconds:x,y;..." taps the touch screen at x, y in thousandths of the
+   screen; "seconds:bN" presses button N (vm.c: 0 home, 1 side, 2/3 volume, 4 power) for a moment. */
+static void *tap_thread(void *unused) {
+    (void)unused;
+    const char *p = getenv("HV_TAPS");
+    time_t start = time(NULL);
+    while (p && *p) {
+        int when, x = 0, y = 0, b = -1, n = 0;
+        if (sscanf(p, "%d:b%d%n", &when, &b, &n) == 2) {}
+        else if (sscanf(p, "%d:%d,%d%n", &when, &x, &y, &n) == 3) b = -1;
+        else break;
+        p += n;
+        if (*p == ';') p++;
+        while (time(NULL) - start < when) sleep(1);
+        if (b >= 0) {
+            fprintf(stderr, "hengevm: button %d at %ld s\n", b, (long)(time(NULL) - start));
+            hv_vm_button(b, 1), usleep(150000), hv_vm_button(b, 0);
+        } else {
+            fprintf(stderr, "hengevm: tap (%d,%d)/1000 at %ld s\n", x, y, (long)(time(NULL) - start));
+            hv_vm_touch(0, 1, x / 1000.0, y / 1000.0), usleep(80000), hv_vm_touch(0, 0, x / 1000.0, y / 1000.0);
+        }
+    }
+    return NULL;
+}
+
 uint64_t hook_pages;
 /* The guest kernel's call chain, by frame pointers. */
 static void guest_frames(HvCpu *c) {
@@ -1044,6 +1069,10 @@ int main(int argc, char **argv) {
     if (getenv("HV_CLICKS")) {
         pthread_t cl;
         pthread_create(&cl, NULL, click_thread, NULL);
+    }
+    if (getenv("HV_TAPS")) {
+        pthread_t tp;
+        pthread_create(&tp, NULL, tap_thread, NULL);
     }
     if (getenv("HV_PROF_PCS")) prof_pcs = calloc(PROF_PCS, sizeof *prof_pcs);
     if (getenv("HV_PROF_ALL")) {

@@ -18,7 +18,7 @@
 #define XECP 0x800
 #define BAR_SIZE 0x4000
 #define SLOTS 8
-#define PORTS 2
+#define PORTS 3 /* keyboard, touch screen, buttons on root ports 1-3; or (HV_USBX_HUB) the hub on port 2 with both behind it */
 #define INTRS 4
 #define EPS 32
 #define QLEN 256
@@ -83,6 +83,7 @@ struct HvUsbx {
     uint16_t hub_status[2], hub_change[2]; /* the hub's two ports: the touch screen, the buttons */
     uint16_t cons;                         /* the consumer usage held down, or 0 */
     int hub_reported;
+    int hub_mode; /* HV_USBX_HUB: the touch screen and buttons behind a hub, as vphone-linux has them (a watch has no hub driver) */
     uint64_t delivered;
 };
 
@@ -106,9 +107,9 @@ static const uint8_t kbd_cfg[34] = {
     9, 2, 34, 0, 1, 1, 0, 0xa0, 50, 9, 4, 0, 0, 1, 3, 1, 1, 0,
     9, 0x21, 0x11, 0x01, 0, 1, 0x22, sizeof kbd_report, 0, 7, 5, 0x81, 3, 8, 0, 10,
 };
-static const uint8_t hub_dev[18] = {18, 1, 0x00, 0x02, 9, 0, 0, 64, 0x09, 0x04, 0xaa, 0x55, 0x01, 0x01, 1, 2, 3, 1};
+static const uint8_t hub_dev[18] = {18, 1, 0x10, 0x01, 9, 0, 0, 8, /* as QEMU's usb-hub: USB 1.1, EP0 of 8 bytes */ 0x09, 0x04, 0xaa, 0x55, 0x01, 0x01, 1, 2, 3, 1};
 static const uint8_t hub_cfg[25] = {9, 2, 25, 0, 1, 1, 0, 0xe0, 0, 9, 4, 0, 0, 1, 9, 0, 0, 0, 7, 5, 0x81, 3, 1, 0, 0xff};
-static const uint8_t hub_desc[9] = {9, 0x29, 2, 0x00, 0x00, 1, 0, 0x06, 0xff}; /* two ports, neither device removable */
+static const uint8_t hub_desc[9] = {9, 0x29, 2, 0x0a, 0x00, 1, 0, 0x06, 0xff}; /* two ports, neither device removable */
 static const uint8_t touch_dev[18] = {18, 1, 0x00, 0x02, 0, 0, 0, 64, 0xac, 0x05, 0x08, 0x81, 0x00, 0x00, 1, 2, 3, 1};
 static const uint8_t touch_cfg[34] = {
     9, 2, 34, 0, 1, 1, 0, 0xa0, 50, 9, 4, 0, 0, 1, 3, 0, 0, 0,
@@ -385,7 +386,10 @@ static int address_device(HvUsbx *x, int slot, uint64_t input, int bsr) {
     uint32_t dw0;
     memcpy(&dw0, sc, 4);
     int port = sc[6], route = (int)(dw0 & 0xfffff);
-    int d = port == 1 && !route ? KBD : port == 2 && !route ? HUB : port == 2 && route == 1 ? TOUCH : port == 2 && route == 2 ? CONS : -1;
+    int d = -1;
+    if (port == 1 && !route) d = KBD;
+    else if (x->hub_mode) d = port == 2 && !route ? HUB : port == 2 && route == 1 ? TOUCH : port == 2 && route == 2 ? CONS : -1;
+    else d = port == 2 && !route ? TOUCH : port == 3 && !route ? CONS : -1;
     if (xlog()) fprintf(stderr, "usbx: address slot %d port %d route %x -> dev %d\n", slot, port, route, d);
     if (d < 0) return CC_TRB_ERROR;
     uint32_t dw3 = (uint32_t)(bsr ? 1 : 2) << 27 | (uint32_t)(bsr ? 0 : slot);
@@ -542,7 +546,7 @@ static void reset(HvUsbx *x) {
     }
     for (int i = 0; i < 2; i++) x->hub_status[i] = 0x101, x->hub_change[i] = 0x1;
     x->hub_reported = 0;
-    for (int p = 0; p < PORTS; p++) x->portsc[p] = connected();
+    for (int p = 0; p < PORTS; p++) x->portsc[p] = x->hub_mode && p == 2 ? PORT_PP : connected();
     update_irq(x);
 }
 
@@ -753,6 +757,7 @@ HvUsbx *hv_usbx_create(HvMachine *m, HvPcie *bus) {
     HvUsbx *x = calloc(1, sizeof *x);
     if (!x) return NULL;
     x->m = m;
+    x->hub_mode = getenv("HV_USBX_HUB") != NULL;
     pthread_mutex_init(&x->mu, NULL);
     x->dev[KBD].rlen = 8, x->dev[HUB].rlen = 1, x->dev[TOUCH].rlen = TOUCH_LEN, x->dev[CONS].rlen = 3;
     for (int i = 0; i <= SLOTS; i++) x->slot_dev[i] = -1;
