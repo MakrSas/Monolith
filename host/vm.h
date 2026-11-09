@@ -69,6 +69,9 @@ const char *hv_vm_reason_name(int reason);
 
 /* Input from the host UI, any thread. Keys are Linux input codes (KEY_A = 30). */
 void hv_vm_key(uint16_t code, int down);
+/* vresearch101 guests: finger 0..3 at x, y (0..1 of the screen), and buttons (vm.c: 0 home, 1 side, 2/3 volume, 4 power). */
+void hv_vm_touch(int finger, int down, double x, double y);
+void hv_vm_button(int which, int down);
 void hv_vm_key_hid(uint8_t usage, int down); /* HID keyboard usage, which is what iOS reports for a hardware keyboard */
 void hv_vm_mouse_move(int dx, int dy);
 void hv_vm_mouse_button(int button, int down); /* 0 left, 1 right, 2 middle */

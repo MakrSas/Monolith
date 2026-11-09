@@ -80,9 +80,15 @@ struct SessionView: View {
                         }
                     }
                     .position(x: layout.screen.midX, y: layout.screen.midY)
-                Trackpad()
-                    .frame(width: layout.touch.width, height: layout.touch.height)
-                    .position(x: layout.touch.midX, y: layout.touch.midY)
+                if mac.isResearch {
+                    TouchScreen()
+                        .frame(width: layout.screen.width, height: layout.screen.height)
+                        .position(x: layout.screen.midX, y: layout.screen.midY)
+                } else {
+                    Trackpad()
+                        .frame(width: layout.touch.width, height: layout.touch.height)
+                        .position(x: layout.touch.midX, y: layout.touch.midY)
+                }
                 if !layout.fillsPhone {
                     uprightControls(layout)
                 } else {
@@ -283,7 +289,27 @@ struct SessionView: View {
             .position(x: layout.pad.midX, y: layout.toolsY + 27)
             .transition(.opacity)
         }
-        trackpadPanel(layout)
+        if mac.isResearch { buttonsPanel(layout) } else { trackpadPanel(layout) }
+    }
+
+    /// A watch or phone guest: its screen takes touches itself, and its buttons go here.
+    private func buttonsPanel(_ layout: Layout) -> some View {
+        HStack(spacing: 0) {
+            DeviceButton(symbol: "digitalcrown.horizontal.press", label: "Home", button: 0)
+            Rectangle().fill(Desk.hairline).frame(width: 0.5)
+            DeviceButton(symbol: "button.vertical.right.press", label: "Side", button: 1)
+            Rectangle().fill(Desk.hairline).frame(width: 0.5)
+            DeviceButton(symbol: "power", label: "Power", button: 4)
+            Rectangle().fill(Desk.hairline).frame(width: 0.5)
+            DeviceButton(symbol: "speaker.plus", label: "Volume +", button: 2)
+            Rectangle().fill(Desk.hairline).frame(width: 0.5)
+            DeviceButton(symbol: "speaker.minus", label: "Volume −", button: 3)
+        }
+        .background(Desk.card)
+        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(Desk.hairline, lineWidth: 0.5))
+        .frame(width: layout.pad.width, height: min(layout.pad.height, 110))
+        .position(x: layout.pad.midX, y: layout.pad.minY + min(layout.pad.height, 110) / 2)
     }
 
     private func trackpadPanel(_ layout: Layout) -> some View {

@@ -725,6 +725,8 @@ static const uint8_t linux_to_hid[256] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
+uint8_t hv_xhci_linux_to_hid(uint16_t code) { return code < 256 ? linux_to_hid[code] : 0; }
+
 void hv_xhci_key_linux(HvXhci *x, uint16_t code, int down) {
     if (code < 256) hv_xhci_key(x, linux_to_hid[code], down);
 }

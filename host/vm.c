@@ -392,11 +392,31 @@ static void rctrl_hold(int *owner, int down) {
 }
 
 void hv_vm_key(uint16_t code, int down) {
+    if (board.usbx) {
+        hv_usbx_key(board.usbx, hv_xhci_linux_to_hid(code), down);
+        return;
+    }
     if (code == LINUX_KEY_RIGHTCTRL) rctrl_hold(&rctrl_user, down);
     else hv_xhci_key_linux(board.usb, code, down);
 }
 
+void hv_vm_touch(int finger, int down, double x, double y) { hv_usbx_touch(board.usbx, finger, down, x, y); }
+
+/* Buttons a phone or watch has, as consumer-page HID usages (what vphone sends): 0 Home / Digital Crown (Menu),
+   1 a watch's side button (Help), 2 volume up, 3 volume down, 4 power (sleep, wake). Power also pulls the
+   power-button GPIO line (pin 3), which is how a shutdown request reaches the guest. */
+void hv_vm_button(int which, int down) {
+    static const uint16_t usage[] = {0x40, 0x95, 0xe9, 0xea, 0x30};
+    if (which < 0 || which > 4) return;
+    hv_usbx_consumer(board.usbx, usage[which], down);
+    if (which == 4 && board.gpio) hv_pl061_set_input(board.gpio, 3, down);
+}
+
 void hv_vm_key_hid(uint8_t usage, int down) {
+    if (board.usbx) {
+        hv_usbx_key(board.usbx, usage, down);
+        return;
+    }
     if (usage == HID_RIGHT_CONTROL) rctrl_hold(&rctrl_user, down);
     else hv_xhci_key(board.usb, usage, down);
 }

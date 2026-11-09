@@ -23,7 +23,9 @@ cp "$VM/nvram.bin" "$OUT/auxiliary.bin"
 cp "$VM/SEPStorage" "$OUT/SEPStorage"
 echo "packing the disk (only its data moves)..."
 "$HERE/build/hvsparse" pack "$VM/Disk.img" "$OUT/disk.img.hvsparse"
+SW=$(plutil -extract screenConfig.width raw "$VM/config.plist" 2>/dev/null || echo 0)
+SH=$(plutil -extract screenConfig.height raw "$VM/config.plist" 2>/dev/null || echo 0)
 cat > "$OUT/machine.json" <<JSON
-{"name": "$NAME", "ecid": $ECID, "seed": 0, "ramMB": $RAM, "platform": "vresearch101"}
+{"name": "$NAME", "ecid": $ECID, "seed": 0, "ramMB": $RAM, "platform": "vresearch101", "screenWidth": $SW, "screenHeight": $SH}
 JSON
 echo "$OUT: $(du -sh "$OUT" | cut -f1)"

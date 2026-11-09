@@ -224,6 +224,7 @@ static uint64_t tick_locked(HvMachine *m, HvCpu *cpu) {
     hv_virtio_blk_poll(b->root_blk);
     hv_virtio_blk_poll(b->aux_blk);
     hv_xhci_poll(b->usb);
+    hv_usbx_poll(b->usbx);
     hv_virtio_input_poll(b->keyboard);
     hv_virtio_input_poll(b->mouse);
     hv_virtio_snd_poll(b->snd);
@@ -322,6 +323,10 @@ int hv_vmapple_create(HvVmapple *b, HvMachine *m, HvCpu *cpu, uint64_t ram_size,
     if (aux) b->aux_blk = hv_virtio_blk_create(m, b->pcie, aux, HV_VBLK_AUX);
     if (root) b->root_blk = hv_virtio_blk_create(m, b->pcie, root, HV_VBLK_ROOT);
     if (mac) b->net = hv_virtio_net_create(m, b->pcie, mac);
+    if (b->research) {
+        /* What vphone-linux gives these guests: a keyboard, and a touch screen behind a hub. No virtio input or sound. */
+        b->usbx = hv_usbx_create(m, b->pcie);
+    } else {
     b->usb = hv_xhci_create(m, b->pcie);
     /* HV_INPUT_ORDER (experiment): "keyboard" = keyboard only, "swap" = mouse first. */
     const char *order = getenv("HV_INPUT_ORDER");
@@ -329,6 +334,7 @@ int hv_vmapple_create(HvVmapple *b, HvMachine *m, HvCpu *cpu, uint64_t ram_size,
     b->keyboard = hv_virtio_input_create(m, b->pcie, HV_VINPUT_KEYBOARD);
     if (!order) b->mouse = hv_virtio_input_create(m, b->pcie, HV_VINPUT_MOUSE);
     if (!getenv("HV_NO_SOUND")) b->snd = hv_virtio_snd_create(m, b->pcie);
+    }
     if (getenv("HV_BALLOON")) {
         b->balloon = hv_virtio_balloon_create(m, b->pcie, b->ram, VMAPPLE_MEM, ram_size, b->ram_fd);
         hv_virtio_balloon_set_target(b->balloon, (uint64_t)atoll(getenv("HV_BALLOON")) << 20);

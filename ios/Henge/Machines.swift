@@ -56,6 +56,8 @@ private struct MachineFile: Codable {
     var ecid: UInt64
     var seed: UInt64?
     var ramMB: Int?
+    var screenWidth: Int?    /* a vphone machine's screen (tools/export_vphone.sh) */
+    var screenHeight: Int?
 }
 
 @MainActor
@@ -162,6 +164,7 @@ final class Machines: ObservableObject {
             guard missing.isEmpty, Self.hasDisk(folder) else { throw message("The folder is missing \((missing + (Self.hasDisk(folder) ? [] : ["disk.img"])).joined(separator: ", ")).") }
             var mac = VirtualMac(name: info.name ?? folder.lastPathComponent, ecid: info.ecid, seed: info.seed ?? 0,
                                  ramMB: info.ramMB ?? 2048, diskBytes: 0)
+            if let w = info.screenWidth, let h = info.screenHeight, w > 0, h > 0 { (mac.screenWidth, mac.screenHeight) = (w, h) }
             importing = mac.name
             unpacked = 0
             let dest = mac.directory

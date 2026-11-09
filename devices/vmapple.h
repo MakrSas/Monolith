@@ -19,6 +19,7 @@
 #include "virtio_snd.h"
 #include "virtio_balloon.h"
 #include "vpiop.h"
+#include "usbx.h"
 
 /* The virtual Mac: QEMU's vmapple memory map and interrupt numbers (hw/vmapple/vmapple.c). */
 #define VMAPPLE_FIRMWARE   0x00100000ull /* 1 MB: the boot ROM */
@@ -75,6 +76,7 @@ typedef struct HvVmapple {
     uint64_t ram_size;
     int ram_fd;              /* the file under guest RAM, kept open for the balloon's holes, or -1 */
     uint64_t panic_events;   /* last pvpanic event the guest reported */
+    HvUsbx *usbx;            /* vresearch101: keyboard, hub and touch screen (instead of usb) */
     HvVpiop *vpiop;          /* vresearch101: the SEP mailbox */
     uint8_t *scratch;        /* vresearch101: avp-scratch RAM above the config window, to 0x700000 */
     int research;            /* vresearch101 (HV_MACHINE=vresearch101): board 0x90, the SEP mailbox, GXF */
