@@ -116,12 +116,14 @@ static const uint8_t touch_cfg[34] = {
 };
 /* The buttons: one consumer-page usage at a time (Menu 0x40 is Home and the Digital Crown, Help 0x95 a watch's side
    button, Power 0x30, Volume 0xe9/0xea), what vphone sends through its guest daemon, here from a USB device. */
+/* Then the Digital Crown's turn: a relative Wheel (Generic Desktop 0x38), one signed byte of detents. */
 static const uint8_t cons_report[] = {0x05, 0x0c, 0x09, 0x01, 0xa1, 0x01, 0x15, 0x00, 0x26, 0xff, 0x03, 0x19, 0x00,
-                                      0x2a, 0xff, 0x03, 0x75, 0x10, 0x95, 0x01, 0x81, 0x00, 0xc0};
+                                      0x2a, 0xff, 0x03, 0x75, 0x10, 0x95, 0x01, 0x81, 0x00,
+                                      0x05, 0x01, 0x09, 0x38, 0x15, 0x81, 0x25, 0x7f, 0x75, 0x08, 0x95, 0x01, 0x81, 0x06, 0xc0};
 static const uint8_t cons_dev[18] = {18, 1, 0x00, 0x02, 0, 0, 0, 64, 0xac, 0x05, 0x09, 0x81, 0x00, 0x00, 1, 2, 3, 1};
 static const uint8_t cons_cfg[34] = {
     9, 2, 34, 0, 1, 1, 0, 0xa0, 50, 9, 4, 0, 0, 1, 3, 0, 0, 0,
-    9, 0x21, 0x11, 0x01, 0, 1, 0x22, sizeof cons_report, 0, 7, 5, 0x81, 3, 2, 0, 4,
+    9, 0x21, 0x11, 0x01, 0, 1, 0x22, sizeof cons_report, 0, 7, 5, 0x81, 3, 3, 0, 4,
 };
 static const char *const strs[NDEV][4] = {
     {NULL, "Apple Inc.", "Virtual USB Keyboard", "1"},
@@ -293,7 +295,7 @@ static int control(HvUsbx *x, int d, const uint8_t setup[8], uint8_t *out, int m
     } else if (type == 0xa1 && req == 1) {
         if (d == KBD) src = x->kbd, len = 8;
         else if (d == TOUCH) touch_report_now(x, t), src = t, len = TOUCH_LEN;
-        else memcpy(t, &x->cons, 2), src = t, len = 2;
+        else memcpy(t, &x->cons, 2), t[2] = 0, src = t, len = 3;
     } else if (type == 0xa1 && (req == 2 || req == 3)) {
         t[0] = req == 3 ? 1 : 0, src = t, len = 1;
     } else if ((type & 0x60) == 0x20 || (type & 0x9c) == 0) {
@@ -717,9 +719,24 @@ void hv_usbx_consumer(HvUsbx *x, uint16_t usage, int down) {
     if (!x) return;
     pthread_mutex_lock(&x->mu);
     x->cons = down ? usage : 0;
-    uint8_t rep[2];
+    uint8_t rep[3] = {0};
     memcpy(rep, &x->cons, 2);
     push(x, CONS, rep);
+    pthread_mutex_unlock(&x->mu);
+    hv_machine_wake(x->m);
+}
+
+void hv_usbx_wheel(HvUsbx *x, int detents) {
+    if (!x || !detents) return;
+    pthread_mutex_lock(&x->mu);
+    while (detents) {
+        int step = detents > 127 ? 127 : detents < -127 ? -127 : detents;
+        uint8_t rep[3];
+        memcpy(rep, &x->cons, 2);
+        rep[2] = (uint8_t)(int8_t)step;
+        push(x, CONS, rep);
+        detents -= step;
+    }
     pthread_mutex_unlock(&x->mu);
     hv_machine_wake(x->m);
 }
@@ -737,7 +754,7 @@ HvUsbx *hv_usbx_create(HvMachine *m, HvPcie *bus) {
     if (!x) return NULL;
     x->m = m;
     pthread_mutex_init(&x->mu, NULL);
-    x->dev[KBD].rlen = 8, x->dev[HUB].rlen = 1, x->dev[TOUCH].rlen = TOUCH_LEN, x->dev[CONS].rlen = 2;
+    x->dev[KBD].rlen = 8, x->dev[HUB].rlen = 1, x->dev[TOUCH].rlen = TOUCH_LEN, x->dev[CONS].rlen = 3;
     for (int i = 0; i <= SLOTS; i++) x->slot_dev[i] = -1;
     hv_pci_init(&x->pci, 0x1b36, 0x000d, 0x0c033000, 0x1af4, 0x1100);
     x->pci.opaque = x;

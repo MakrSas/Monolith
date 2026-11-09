@@ -412,6 +412,8 @@ void hv_vm_button(int which, int down) {
     if (which == 4 && board.gpio) hv_pl061_set_input(board.gpio, 3, down);
 }
 
+void hv_vm_crown(int detents) { hv_usbx_wheel(board.usbx, detents); }
+
 void hv_vm_key_hid(uint8_t usage, int down) {
     if (board.usbx) {
         hv_usbx_key(board.usbx, usage, down);

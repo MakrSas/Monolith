@@ -58,7 +58,9 @@ void henge_vm_key(uint16_t code, int down);
 void henge_vm_key_hid(uint8_t usage, int down);
 /* A vresearch101 guest (watchOS, iOS): finger 0..3 at x, y in 0..1 of the screen; buttons 0 home (crown), 1 side, 2/3 volume, 4 power. */
 void henge_vm_touch(int finger, int down, double x, double y);
-void henge_vm_button(int which, int down); /* a hardware keyboard: iOS gives each key's HID usage */
+void henge_vm_button(int which, int down);
+/* The Digital Crown turned by detents (positive: up). */
+void henge_vm_crown(int detents); /* a hardware keyboard: iOS gives each key's HID usage */
 void henge_vm_mouse_move(int dx, int dy);
 void henge_vm_mouse_button(int button, int down);
 /* Wheel units: dy > 0 up, dx > 0 right. */

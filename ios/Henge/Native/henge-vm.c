@@ -167,6 +167,7 @@ void henge_vm_key(uint16_t code, int down) { if (state == 1) hv_vm_key(code, dow
 void henge_vm_key_hid(uint8_t usage, int down) { if (state == 1) hv_vm_key_hid(usage, down); }
 void henge_vm_touch(int finger, int down, double x, double y) { if (state == 1) hv_vm_touch(finger, down, x, y); }
 void henge_vm_button(int which, int down) { if (state == 1) hv_vm_button(which, down); }
+void henge_vm_crown(int detents) { if (state == 1) hv_vm_crown(detents); }
 void henge_vm_mouse_move(int dx, int dy) { if (state == 1) hv_vm_mouse_move(dx, dy); }
 void henge_vm_mouse_button(int button, int down) { if (state == 1) hv_vm_mouse_button(button, down); }
 void henge_vm_mouse_scroll(int dx, int dy) {

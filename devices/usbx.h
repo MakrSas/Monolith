@@ -21,6 +21,8 @@ void hv_usbx_touch(HvUsbx *x, int finger, int down, double fx, double fy);
 /* A consumer-page button (0x40 Menu: Home, the Digital Crown; 0x95 Help: a watch's side button; 0x30 Power;
    0xe9/0xea volume) went down or up. */
 void hv_usbx_consumer(HvUsbx *x, uint16_t usage, int down);
+/* The Digital Crown turned by detents (positive: up, away from the wearer). */
+void hv_usbx_wheel(HvUsbx *x, int detents);
 uint64_t hv_usbx_delivered(HvUsbx *x);
 
 #endif
