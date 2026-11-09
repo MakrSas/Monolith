@@ -8,6 +8,7 @@
 #include "machine.h"
 #include "dispatch.h"
 #include "mmu.h"
+#include "gxf.h"
 
 /* Only EL0 and EL1 exist for the guest; HengeVM plays EL2 (PSCI over HVC, as
    QEMU's vmapple machine sets up) and there is no EL3. */
@@ -56,11 +57,25 @@ void hv_take_exception(HvCpu *cpu, int type, uint32_t esr, uint64_t far, int set
         fprintf(stderr, "exception type %d esr %08x far %llx from pc %llx el%u\n", type, esr, (unsigned long long)far,
                 (unsigned long long)ret, cpu->el);
     uint64_t offset = cpu->el == 0 ? 0x400 : cpu->spsel ? 0x200 : 0x000;
-    cpu->spsr_el1 = spsr;
-    cpu->elr_el1 = ret;
-    if (type == HV_EXC_SYNC || type == HV_EXC_SERROR) cpu->esr_el1 = esr;
-    if (set_far) cpu->far_el1 = far;
+    int gx = cpu->gxf.kind, guarded = hv_gxf_guarded(cpu);
+    cpu->gxf.kind = 0;
+    uint64_t base = (cpu->vbar_el1 & ~0x7ffull);
+    if (gx || guarded) { /* GXF: into GL1's banked registers (and its own vector, entry or abort handler) */
+        base = gx == 1 ? cpu->gxf.enter : gx == 2 ? cpu->gxf.abort : cpu->gxf.vbar_gl;
+        cpu->gxf.spsr_gl = spsr;
+        cpu->gxf.elr_gl = ret;
+        if (type == HV_EXC_SYNC || type == HV_EXC_SERROR) cpu->gxf.esr_gl = esr;
+        if (set_far) cpu->gxf.far_gl = far;
+    } else {
+        cpu->spsr_el1 = spsr;
+        cpu->elr_el1 = ret;
+        if (type == HV_EXC_SYNC || type == HV_EXC_SERROR) cpu->esr_el1 = esr;
+        if (set_far) cpu->far_el1 = far;
+    }
+    int was0 = cpu->el == 0;
     hv_sp_switch(cpu, 1, 1);
+    if (gx) hv_gxf_set_gl1(cpu, 1);
+    else if (was0 && cpu->gxf.on && hv_gxf_sprr_on(cpu) && (cpu->gxf.status[0] & 1) != (cpu->gxf.status[1] & 1)) hv_tlb_flush(cpu);
     cpu->daif = HV_PSTATE_DAIF;
     uint64_t extra = cpu->pstate_extra;
     if (!((cpu->sctlr_el1 >> 23) & 1)) extra |= HV_PSTATE_PAN; /* SCTLR_EL1.SPAN == 0 */
@@ -68,7 +83,7 @@ void hv_take_exception(HvCpu *cpu, int type, uint32_t esr, uint64_t far, int set
     if ((cpu->sctlr_el1 >> 44) & 1) extra |= 1ull << 12;      /* SSBS from DSSBS */
     set_extra(cpu, extra);
     cpu->excl_addr = ~0ull;
-    cpu->pc = (cpu->vbar_el1 & ~0x7ffull) + offset + (uint64_t)type * 0x80;
+    cpu->pc = base + offset + (uint64_t)type * 0x80;
     cpu->exit_reason = HV_EXIT_EXCEPTION;
 }
 
@@ -117,8 +132,15 @@ void hv_eret(HvCpu *cpu) {
         st->elchg[k].from = cpu->pc, st->elchg[k].to = cpu->elr_el1, st->elchg[k].spsr = cpu->spsr_el1;
         st->elchg[k].kind = 9, st->elchg[k].el = cpu->el;
     }
-    cpu->pc = cpu->elr_el1;
-    hv_pstate_set(cpu, cpu->spsr_el1);
+    int from_guarded = hv_gxf_guarded(cpu);
+    if (from_guarded) {
+        cpu->pc = cpu->gxf.elr_gl;
+        hv_pstate_set(cpu, cpu->gxf.spsr_gl);
+    } else {
+        cpu->pc = cpu->elr_el1;
+        hv_pstate_set(cpu, cpu->spsr_el1);
+    }
+    if (cpu->gxf.on) hv_gxf_after_eret(cpu, from_guarded);
     cpu->excl_addr = ~0ull;
 }
 

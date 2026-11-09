@@ -251,6 +251,10 @@ int hv_vmapple_create(HvVmapple *b, HvMachine *m, HvCpu *cpu, uint64_t ram_size,
     b->ncpus = cfg->nr_cpus ? (int)cfg->nr_cpus : 1;
     if (b->ncpus > HV_MAX_CPUS) b->ncpus = HV_MAX_CPUS;
     b->ram_size = ram_size;
+    const char *machine = getenv("HV_MACHINE");
+    b->research = machine && !strcmp(machine, "vresearch101");
+    m->gxf_on = b->research;
+    if (b->research) fprintf(stderr, "hengevm: machine vresearch101\n");
     /* HV_RAM_FILE: guest RAM in a file. iOS's memory limit counts anonymous
        pages and not pages of a mapped file, which it can also write out and
        drop by itself, so the guest can have more RAM than the app may hold.
@@ -301,8 +305,16 @@ int hv_vmapple_create(HvVmapple *b, HvMachine *m, HvCpu *cpu, uint64_t ram_size,
     b->pvg = hv_pvg_lite_create(m, b->gic, VMAPPLE_GFX, VMAPPLE_IOSFC, 32 + 0x11, 32 + 0x10);
     hv_machine_add_mmio(m, VMAPPLE_RTC_SELECT, 0x4000, b, rtc_select_read, rtc_select_write, "rtc-select");
     avp_regs_create(m, ram_size);
+    if (b->research) {
+        /* QEMU's vresearch101 maps "avp-scratch" RAM at 0x410000..0x700000; the config window covers the first MB. */
+        b->scratch = mmap(NULL, 0x200000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+        if (b->scratch == MAP_FAILED) return -1;
+        hv_machine_add_ram(m, 0x500000, 0x200000, b->scratch, 0);
+        b->vpiop = hv_vpiop_create(m, b->gic, 0x30250000, 32 + 0x14);
+    }
     HvCfgParams p = *cfg;
     p.ram_size = ram_size;
+    if (b->research) p.board_id = 0x90;
     b->cfg = hv_cfg_create(m, VMAPPLE_CONFIG, &p);
     b->pcie = hv_pcie_create(m, b->gic, VMAPPLE_PCIE_ECAM, 0x10000000, VMAPPLE_PCIE_MMIO, 0x1fff0000,
                              32 + VMAPPLE_IRQ_PCIE);

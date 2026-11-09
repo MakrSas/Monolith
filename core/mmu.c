@@ -5,6 +5,7 @@
 
 #include "exception.h"
 #include "machine.h"
+#include "gxf.h"
 
 /* VMSAv8-64 stage 1 translation for the EL1&0 regime, 4 KB, 16 KB and 64 KB
    granules, 48-bit VA and PA. There is no stage 2: HengeVM is the hypervisor. */
@@ -119,6 +120,13 @@ void hv_mmu_walk(HvCpu *cpu, uint64_t va, HvAccess acc, int el, HvWalk *out) {
         int pxn = ((desc >> 53) & 1) | pxn_table;
         int el0_access = (ap & 1) && !(ap_table & 1);
         int read_only = (ap & 2) || (ap_table & 2);
+        if (hv_gxf_sprr_on(cpu)) { /* SPRR: the leaf's (AP, UXN, PXN) index the permission table; table XN only takes exec away */
+            hv_gxf_sprr_perm(cpu, el, ap, (int)((desc >> 54) & 1), (int)((desc >> 53) & 1), &out->r, &out->w, &out->x);
+            if (el == 0 ? uxn_table : pxn_table) out->x = 0;
+            int ok = acc == HV_ACC_READ ? out->r : acc == HV_ACC_WRITE ? out->w : out->x;
+            if (!ok) out->fsc = HV_FSC_PERMISSION(level);
+            return;
+        }
         if (el == 0) {
             out->r = el0_access;
             out->w = el0_access && !read_only;

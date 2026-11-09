@@ -8,6 +8,7 @@
 
 #include "mmu.h"
 #include "sysreg.h"
+#include "gxf.h"
 
 extern void hv_exit(void);
 extern void hv_helper_entry(void);
@@ -546,6 +547,7 @@ void hv_cpu_reset_index(HvCpu *cpu, HvMachine *m, uint32_t index) {
     cpu->m = m;
     cpu->index = index;
     cpu->pc_state = &m->percpu[index];
+    hv_gxf_reset(cpu, m->gxf_on);
     m->cpus[index] = cpu;
     if (m->ncpus <= (int)index) m->ncpus = (int)index + 1;
     if (index == 0) m->cpu = cpu;

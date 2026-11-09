@@ -256,6 +256,7 @@ typedef struct HvMachine {
     HvCpu *cpu;              /* CPU 0: the one that polls devices */
     HvCpu *cpus[HV_MAX_CPUS]; /* every CPU, so device and invalidation code can ask them to leave */
     int ncpus;
+    int gxf_on;               /* CPUs have Apple GXF/SPRR (vresearch101) */
     HvPerCpu percpu[HV_MAX_CPUS];
     /* With more than one CPU, only the holder of this runs guest code (a fair
        ticket lock, handed over at every kick and while a CPU sleeps). */

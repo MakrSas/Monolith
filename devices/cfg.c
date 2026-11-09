@@ -91,7 +91,7 @@ uint8_t *hv_cfg_create(HvMachine *m, uint64_t pa, const HvCfgParams *p) {
     c->nr_cpus = p->nr_cpus ? p->nr_cpus : 1;
     c->unk1 = 1;
     c->unk2 = 1;
-    c->unk3 = 0x20;
+    c->unk3 = p->board_id ? p->board_id : 0x20; /* iBoot's board ID */
     c->unk4 = 0;
     c->ecid = p->ecid;
     c->ram_size = p->ram_size;

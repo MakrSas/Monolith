@@ -8,6 +8,7 @@
 #include "machine.h"
 #include "memop.h"
 #include "mmu.h"
+#include "gxf.h"
 #include <stdlib.h>
 
 /* System registers are named by op0:op1:CRn:CRm:op2, which is bits 20..5 of MRS/MSR. */
@@ -48,6 +49,7 @@ static uint64_t timer_ctl(uint64_t ctl, uint64_t cval, uint64_t now) {
 
 /* EL0 is allowed only a few registers, some gated by SCTLR_EL1 / CNTKCTL_EL1. */
 static int el0_allowed(HvCpu *cpu, uint32_t reg, int write) {
+    if (hv_gxf_el0_allowed(cpu, reg)) return 1;
     uint64_t k = cpu->cntkctl_el1;
     switch (reg) {
     case R(3, 3, 4, 2, 0): case R(3, 3, 4, 4, 0): case R(3, 3, 4, 4, 1): /* NZCV, FPCR, FPSR */
@@ -69,6 +71,7 @@ static int el0_allowed(HvCpu *cpu, uint32_t reg, int write) {
 
 /* Returns 0 and sets *v, or -1 if the register does not exist. */
 static int read_reg(HvCpu *cpu, uint32_t reg, uint64_t *v) {
+    if (cpu->gxf.on && hv_gxf_read(cpu, reg, v) == 0) return 0;
     uint64_t now = counter();
     HvMachine *m = cpu->m;
     switch (reg) {
@@ -168,6 +171,7 @@ static int read_reg(HvCpu *cpu, uint32_t reg, uint64_t *v) {
 }
 
 static int write_reg(HvCpu *cpu, uint32_t reg, uint64_t v) {
+    if (cpu->gxf.on && hv_gxf_write(cpu, reg, v) == 0) return 0;
     HvMachine *m = cpu->m;
     switch (reg) {
     case R(3, 3, 4, 2, 0): cpu->nzcv = v & 0xf0000000; return 0;

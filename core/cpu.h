@@ -103,6 +103,18 @@ typedef struct HvCpu {
     /* The rest is only touched by C. */
     struct HvMachine *m;
     uint32_t el;
+    /* Apple GXF (guarded execution: SPTM at GL1, TXM at GL0) and SPRR (page permissions by index), for
+       vresearch101 guests: core/gxf.c. All zero (off) for a virtual Mac. */
+    struct {
+        int on;
+        int kind;                    /* the exception being taken: 1 GENTER, 2 GXF abort, 0 any other */
+        uint64_t status[2];          /* GXF_STATUS_EL0/EL1: bit 0 guarded */
+        uint64_t config, enter, abort, aspsr;
+        uint64_t sp_gl, tpidr_gl, vbar_gl, spsr_gl, esr_gl, elr_gl, far_gl;
+        uint64_t sprr_config[2];     /* SPRR_CONFIG_EL0/EL1: bit 0 on */
+        uint64_t sprr_perm[2][2];    /* [table EL][EL]: 16 four-bit attributes by (AP, UXN, PXN) */
+        uint64_t c3_0, mprr[5];
+    } gxf;
 
     /* The exclusive monitor is excl_addr, excl_size and excl_val above: STXR is a
        compare-and-swap against the value the LDXR saw, the way QEMU does it, so

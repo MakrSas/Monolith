@@ -1,3 +1,4 @@
+#include "gxf.h"
 #include "dispatch.h"
 
 #include <mach/mach.h>
@@ -397,6 +398,7 @@ static uint32_t helper(HvCpu *cpu, const HvHelperInfo *info_in) {
         return wfe(cpu);
     case HV_OP_UNDEF:
     default:
+        if (cpu->gxf.on && hv_gxf_insn(cpu, info->insn, info->pc)) return 1;
         hv_raise_undef(cpu, info->pc);
         return 1;
     }

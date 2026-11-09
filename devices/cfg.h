@@ -13,6 +13,7 @@ typedef struct HvCfgParams {
     uint64_t ram_size;
     uint32_t run_installer1, run_installer2;
     uint32_t rnd;
+    uint32_t board_id; /* 0: vmapple (0x20); 0x90: vresearch101 */
     uint8_t mac_en0[6], mac_en1[6], mac_wifi0[6], mac_bt0[6];
     const char *serial, *model, *soc_name; /* NULL: QEMU's defaults */
     uint64_t seed;  /* nonzero: `rnd` gives a reproducible sequence (for debugging) */
