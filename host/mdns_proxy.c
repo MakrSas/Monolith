@@ -109,6 +109,7 @@ static void registered(DNSServiceRef ref, DNSServiceFlags flags, DNSServiceError
 static void publish(Service *s) {
     if (s->ref || !s->guest_port || !s->have_txt || !s->type[0]) return;
     if (!strcmp(s->type, "_sleep-proxy._udp")) return; /* a host's job, not a guest's */
+    if (!strcmp(s->type, "_remotepairing._tcp")) return; /* a fresh identity each time it asks, and not for this */
     struct in_addr any, guest;
     inet_pton(AF_INET, "0.0.0.0", &any);
     inet_pton(AF_INET, "10.0.2.15", &guest);

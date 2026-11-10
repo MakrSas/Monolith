@@ -238,7 +238,13 @@ static void *net_thread(void *unused) {
             if (to_host.head != to_host.tail) f = to_host.f[to_host.head++ % QUEUE];
             pthread_mutex_unlock(&to_host.mu);
             if (!f.data) break;
-            hv_mdns_proxy_frame(slirp, f.data, f.len);
+            if (hv_mdns_proxy_is_mdns(f.data, f.len)) {
+                /* Never out as it is: libslirp would send it to the host's network, where its records name
+                   10.0.2.15 and take the guest's names from the proxy's (mdns_proxy.c). */
+                hv_mdns_proxy_frame(slirp, f.data, f.len);
+                free(f.data);
+                continue;
+            }
             slirp_input(slirp, f.data, (int)f.len);
             free(f.data);
         }
