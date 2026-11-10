@@ -271,15 +271,18 @@ struct SessionView: View {
                 toolsY = 0
                 pad = .zero
             } else {
-                let width = full.width - 16
-                let height = width / aspect
-                screen = CGRect(x: 8, y: insets.top + 6, width: width, height: height)
+                // A tall guest (an iPhone) is narrowed so its toolbar and buttons still fit below it.
+                let room = full.height - insets.top - insets.bottom - 6 - 10 - 54 - 10 - 120
+                var width = full.width - 16
+                var height = width / aspect
+                if height > room, room > 100 { height = room; width = height * aspect }
+                screen = CGRect(x: (full.width - width) / 2, y: insets.top + 6, width: width, height: height)
                 touch = screen
                 fillsPhone = false
                 toolsY = screen.maxY + 10
                 let top = typing ? screen.maxY + 8 : toolsY + 54 + 10
                 let bottom = full.height - insets.bottom - (typing ? 8 : 0)
-                pad = CGRect(x: 8, y: top, width: width, height: max(bottom - top, 60))
+                pad = CGRect(x: 8, y: top, width: full.width - 16, height: max(bottom - top, 60))
             }
         }
     }

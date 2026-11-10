@@ -26,6 +26,8 @@ Research notes, 2026-11-10. Guests: watchOS 26.4 (23T240, Watch7,18) and iOS 26.
 - Related names: `LocalAuth`, `RemotePublicKey`, `SharedSecret`, `NRPairing`, `networkrelay-pairing`, `WatchPairing`, `IDSPinnedIdentity`.
 - **Open question: how a fresh pairing first exchanges the Ed25519 keys.** Probably a `SharedSecret` bootstrap, from the BTVC or `_nrd` data or set up by NanoRegistry. Next step: read `terminusd`'s first-pairing path, or answer the watch's IKE ourselves and see where it stops.
 
+**Update from offline binary analysis:** the OOBK path bootstraps IKE with an externally supplied secret and carries long-term public keys in private IKE_AUTH notifications. The later Ed25519-authenticated session is a separate stage. The remaining question is where the caller obtains the initial OOBK, and which bootstrap path the captured VM pairing selected. See [terminusd analysis](watch-pairing-terminusd.md) for addresses and limitations; the earlier `_nrd` hypothesis is not established.
+
 ## Reference project
 
 https://github.com/LordixDemon/apple_watch_connector reverse-engineered pairing over real BLE on watchOS 26.2: BT_CL on CID 0x3a, SPAKE2+ PIN, uIKE, SMP, and IKE/ESP inside NetworkRelay over L2CAP. It has no license, so use it as a protocol description only and do not copy its code. In VMs the path is different: IKE runs directly over UDP.
