@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 
 #define MAX_SERVICES 48
 #define MAX_NAME 256
@@ -106,6 +107,38 @@ static void registered(DNSServiceRef ref, DNSServiceFlags flags, DNSServiceError
     fprintf(stderr, "hengevm: published %s %s: %d\n", name, type, err);
 }
 
+/* AirPlay hands the sender more ports inside its encrypted setup (events, buffered audio, timing, control),
+   from the guest's ephemeral range, where its first listeners (49152, 49153: companion-link, pairing) are.
+   They can't be read off the wire, so the start of that range is forwarded up front, TCP and UDP, at the
+   same port numbers. HV_NET_PUBLISH_RANGE=first-last changes it. */
+static int range_done;
+
+static void forward_range(void) {
+    if (range_done) return;
+    range_done = 1;
+    int first = 49154, last = 49400;
+    const char *e = getenv("HV_NET_PUBLISH_RANGE");
+    if (e) sscanf(e, "%d-%d", &first, &last);
+    struct rlimit rl;
+    if (!getrlimit(RLIMIT_NOFILE, &rl) && rl.rlim_cur < 4096) {
+        rl.rlim_cur = rl.rlim_max < 4096 ? rl.rlim_max : 4096;
+        setrlimit(RLIMIT_NOFILE, &rl);
+    }
+    struct in_addr any, guest;
+    inet_pton(AF_INET, "0.0.0.0", &any);
+    inet_pton(AF_INET, "10.0.2.15", &guest);
+    int tcp = 0, udp = 0;
+    for (int p = first; p <= last; p++) {
+        int taken = 0;
+        for (int i = 0; i < MAX_SERVICES; i++)
+            if (services[i].used && services[i].host_port == p) taken = 1;
+        if (taken) continue;
+        tcp += slirp_add_hostfwd(slirp_for_fwd, 0, any, p, guest, p) == 0;
+        udp += slirp_add_hostfwd(slirp_for_fwd, 1, any, p, guest, p) == 0;
+    }
+    fprintf(stderr, "hengevm: forwarded guest ports %d-%d: %d TCP, %d UDP\n", first, last, tcp, udp);
+}
+
 static void publish(Service *s) {
     if (s->ref || !s->guest_port || !s->have_txt || !s->type[0]) return;
     if (!strcmp(s->type, "_sleep-proxy._udp")) return; /* a host's job, not a guest's */
@@ -122,6 +155,7 @@ static void publish(Service *s) {
             if (slirp_add_hostfwd(slirp_for_fwd, s->udp, any, p, guest, s->guest_port) == 0) { s->host_port = (uint16_t)p; break; }
         if (!s->host_port) { fprintf(stderr, "hengevm: no host port for %s\n", s->instance); return; }
     }
+    if (strstr(s->type, "_airplay") || strstr(s->type, "_raop")) forward_range();
     DNSServiceErrorType e = DNSServiceRegister(&s->ref, 0, 0, s->name, s->type, NULL, NULL, htons(s->host_port),
                                                s->txt_len, s->txt, registered, NULL);
     fprintf(stderr, "hengevm: publishing %s (%s) guest port %u on host port %u: %d\n", s->name, s->type,
@@ -260,6 +294,7 @@ void hv_mdns_proxy_tick(int64_t now_ms, void (*send)(const uint8_t *frame, uint3
 }
 
 void hv_mdns_proxy_stop(void) {
+    range_done = 0;
     enabled = -1; /* the next machine reads HV_NET_PUBLISH again */
     ntypes = 0;
     last_query = 0;
