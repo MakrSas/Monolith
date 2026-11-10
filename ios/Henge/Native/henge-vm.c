@@ -51,7 +51,6 @@ int henge_vm_boot(const char *rom, const char *disk, const char *aux, uint64_t e
         snprintf(err, errlen, "Henge has no JIT region. Turn on JIT first.");
         return -1;
     }
-    if (sep_rom && cpus > 2) cpus = 2; /* vresearch101 guests (watch, TV) as vphone runs them: two cores */
     HvVmConfig c = {.rom = rom, .disk = disk, .aux = aux, .ecid = ecid, .seed = seed, .ram_mb = ram_mb, .ncpus = cpus, .log = 1,
                     .jit_rx = jit->rx_addr, .jit_rw = jit->rw_addr, .jit_bytes = jit->size, .sep_rom = sep_rom, .sep_storage = sep_storage};
     fprintf(stderr, "henge: booting with %d CPUs, %llu MB RAM, a %zu MB JIT region\n", cpus, (unsigned long long)ram_mb,
