@@ -62,7 +62,7 @@ struct SessionView: View {
                         if display.isExternal {
                             VStack(spacing: 8) {
                                 Image(systemName: "display").font(.largeTitle)
-                                Text("Mac on external display").font(.headline)
+                                Text("Device on external display").font(.headline)
                                 Text("Use the trackpad, keyboard or a connected mouse.")
                                     .font(.subheadline)
                             }
@@ -95,7 +95,7 @@ struct SessionView: View {
                     floatingControls(layout)
                 }
                 if pointerRefused && !showRevealHint {
-                    Label("Make Henge full screen to use the trackpad or mouse as the Mac's", systemImage: "cursorarrow.rays")
+                    Label("Make Monolith full screen to use the trackpad or mouse as the device's pointer", systemImage: "cursorarrow.rays")
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 18).padding(.vertical, 12)
@@ -156,7 +156,7 @@ struct SessionView: View {
         .confirmationDialog("Shut down \(mac.name)?", isPresented: $confirmStop, titleVisibility: .visible) {
             Button("Shut Down", role: .destructive) { finish() }
         } message: {
-            Text("This turns the Mac off at once. Anything not saved on it is lost.")
+            Text("This turns the device off at once. Anything not saved on it is lost.")
         }
         .onChange(of: zoomed) { on in
             zoomFollowing?.cancel()
@@ -473,7 +473,7 @@ struct SessionView: View {
 
     private func errorCard(_ text: String, _ layout: Layout) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("This Mac could not start").font(.system(size: 17, weight: .semibold))
+            Text("This device could not start").font(.system(size: 17, weight: .semibold))
             Text(text).font(.system(size: 14)).foregroundStyle(Desk.dim)
             Button("Close") { close() }.font(.system(size: 15, weight: .semibold)).foregroundStyle(Desk.accentLight)
         }
@@ -486,7 +486,7 @@ struct SessionView: View {
     private var phase: String {
         switch state {
         case 0: return error == nil ? "Starting…" : "Not started"
-        case 1: return userCode ? "macOS is running" : "Booting"
+        case 1: return userCode ? "Running" : "Booting"
         default: return "Stopped (\(String(cString: henge_vm_exit_reason())))"
         }
     }
@@ -505,7 +505,7 @@ struct SessionView: View {
                     Toggle("Color matching", isOn: $matchScreenColors)
                     LabeledContent("Brightness", value: "\(Int(screenBrightness * 100))%")
                     Slider(value: $screenBrightness, in: 0.4...1)
-                    Text("Brightness dims only the Mac's screen.")
+                    Text("Brightness dims only the device's screen.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("Pointer") {
@@ -518,7 +518,7 @@ struct SessionView: View {
                     Toggle("Sharp edges", isOn: $sharpCursor)
                     LabeledContent("Scroll speed", value: String(format: "%.1f×", scrollSpeed))
                     Slider(value: $scrollSpeed, in: 0.1...1.5)
-                    Text("The Mac supplies a small pointer image. Enlarging it can look blurry; 1× is the sharpest on an iPad. Scroll speed changes apply immediately.")
+                    Text("The guest supplies a small pointer image. Enlarging it can look blurry; 1× is the sharpest on an iPad. Scroll speed changes apply immediately.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("Sharing") {
@@ -533,7 +533,7 @@ struct SessionView: View {
                         }
                     }
                     Text(helperRunning
-                         ? "Put files in Files, Henge, Shared to see them in the Henge folder in this Mac's home folder. What you copy on the Mac is copied here too, and the paste button pastes from here into the Mac."
+                         ? "Put files in Files, Monolith, Shared to see them in the Monolith folder in this Mac's home folder. What you copy on the Mac is copied here too, and the paste button pastes from here into the Mac."
                          : "Once for each Mac: open Terminal on the Mac, tap this, then press Return. When macOS asks about henge-agent and local networks, choose Allow. It types \(Sharing.setUpCommand) and needs the Mac's keyboard layout to be U.S.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
@@ -585,7 +585,7 @@ struct SessionView: View {
         let ram = GuestMemory.prepare(mac)
         HengeLog.log("session", "available memory \(henge_available_memory() >> 20) MB")
         guard ram >= 1024 else {
-            error = "There is not room for this Mac's memory: it needs a few GB of free storage."
+            error = "There is not room for this device's memory: it needs a few GB of free storage."
             return
         }
         var buffer = [CChar](repeating: 0, count: 256)

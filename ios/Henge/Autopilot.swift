@@ -1,7 +1,7 @@
 import Foundation
 import UIKit
 
-/// Testing a build on a phone nobody is holding. Henge follows Documents/henge-autopilot.txt when it is
+/// Testing a build on a phone nobody is holding. Monolith follows Documents/henge-autopilot.txt when it is
 /// launched with HENGE_AUTOPILOT set, as in
 ///   xcrun devicectl device process launch -e '{"HENGE_AUTOPILOT":"1"}' --device ID BUNDLE
 /// or, for a launch by hand (a locked phone driven through iPhone Mirroring), once: at launch
@@ -22,7 +22,7 @@ import UIKit
 ///   snap [NAME]        the Mac's screen (1920x1080) into Documents/NAME.jpg (snap.jpg)
 ///   log TEXT           a marker in henge.log
 ///   stop               stop the Mac
-///   exit               quit Henge
+///   exit               quit Monolith
 /// Each command is written to henge.log as it runs, so the log has the timeline.
 enum Autopilot {
     private static let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

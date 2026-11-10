@@ -34,7 +34,7 @@ enum EngineTuning {
                 let line = raw.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init)?
                     .trimmingCharacters(in: .whitespaces) ?? ""
                 guard let eq = line.firstIndex(of: "="), eq != line.startIndex else { continue }
-                // {Documents} stands for this folder: its absolute path changes when Henge is reinstalled.
+                // {Documents} stands for this folder: its absolute path changes when Monolith is reinstalled.
                 env[String(line[..<eq]).trimmingCharacters(in: .whitespaces)] = String(line[line.index(after: eq)...])
                     .trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "{Documents}", with: docs.path)
             }

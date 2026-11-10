@@ -1,7 +1,7 @@
 import Foundation
 import UIKit
 
-/// A Mac made on the Mac (HengeVM or Henge) and brought over: its boot ROM,
+/// A Mac made on the Mac (HengeVM or Monolith) and brought over: its boot ROM,
 /// disk and auxiliary storage, and the identity it was installed with.
 struct VirtualMac: Identifiable, Codable, Hashable {
     var id = UUID()
@@ -32,7 +32,7 @@ struct VirtualMac: Identifiable, Codable, Hashable {
     var isResearch: Bool { FileManager.default.fileExists(atPath: sepROM.path) }
 }
 
-/// How much RAM a Mac gets. The engine first asks the kernel to leave it out of Henge's footprint,
+/// How much RAM a Mac gets. The engine first asks the kernel to leave it out of Monolith's footprint,
 /// which is allowed once a debugger has attached (how JIT is turned on). If that is refused it uses
 /// a file beside the disk: iOS's memory limit does not count a mapped file's pages either.
 enum GuestMemory {
@@ -82,7 +82,7 @@ final class Machines: ObservableObject {
     /// While a Mac is being exported: its name and how far along.
     @Published private(set) var exporting: String?
     @Published private(set) var exported: Double = 0
-    /// The last finished export, ready to be moved out of Henge.
+    /// The last finished export, ready to be moved out of Monolith.
     @Published var lastExport: URL?
 
     private init() {
@@ -94,11 +94,11 @@ final class Machines: ObservableObject {
     nonisolated static let installedMarker = "installed"
 
     /// Machine folders nothing refers to (an install cut short by a crash or by quitting): their disks take real space.
-    /// A folder whose install finished (Henge stopped before it was listed) is listed again instead, and nothing is
+    /// A folder whose install finished (Monolith stopped before it was listed) is listed again instead, and nothing is
     /// removed when the list itself could not be read: every Mac would look unreferenced.
     private func removeLeftovers() {
         if listUnreadable {
-            HengeLog.log("machines", "the list of Macs could not be read: no machine folder is removed")
+            HengeLog.log("machines", "the list of devices could not be read: no machine folder is removed")
             return
         }
         let known = Set(all.map(\.id))
@@ -110,7 +110,7 @@ final class Machines: ObservableObject {
             if fm.fileExists(atPath: marker.path), let data = try? Data(contentsOf: item.appendingPathComponent("machine.json")),
                let info = try? JSONDecoder().decode(MachineFile.self, from: data),
                fm.fileExists(atPath: item.appendingPathComponent("disk.img").path) {
-                var mac = VirtualMac(id: id, name: info.name ?? "Mac", ecid: info.ecid, seed: info.seed ?? 0,
+                var mac = VirtualMac(id: id, name: info.name ?? "Device", ecid: info.ecid, seed: info.seed ?? 0,
                                      ramMB: info.ramMB ?? Device.suggestedRAMGB * 1024, diskBytes: 64 << 30)
                 let os = (try? String(contentsOf: marker, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 mac.osName = os.isEmpty ? nil : os
@@ -131,10 +131,10 @@ final class Machines: ObservableObject {
         return base.appendingPathComponent("Machines", isDirectory: true)
     }
     nonisolated static func directory(for id: UUID) -> URL { root.appendingPathComponent(id.uuidString, isDirectory: true) }
-    /// Where Finder file sharing puts what the user drops on Henge.
+    /// Where Finder file sharing puts what the user drops on Monolith.
     nonisolated static var inbox: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] }
 
-    /// Folders dropped into Henge's Documents over Finder (or the Files app) that look like
+    /// Folders dropped into Monolith's Documents over Finder (or the Files app) that look like
     /// an exported machine are moved in. A move, not a copy: a disk image is tens of gigabytes.
     func collectImports() {
         Task { await collect() }
@@ -203,8 +203,8 @@ final class Machines: ObservableObject {
     }
 
     /// Makes a folder "Bring in a Mac" can read back (the same files tools/export_ios.sh writes),
-    /// in Documents/Exports, which the Files app can reach. Deleting Henge deletes that folder too,
-    /// so it has to be moved out of Henge before a reinstall that replaces the app's data.
+    /// in Documents/Exports, which the Files app can reach. Deleting Monolith deletes that folder too,
+    /// so it has to be moved out of Monolith before a reinstall that replaces the app's data.
     func export(_ mac: VirtualMac) {
         guard exporting == nil, importing == nil else { return }
         exporting = mac.name
@@ -293,7 +293,7 @@ final class Machines: ObservableObject {
         try? url.setResourceValues(values)
     }
 
-    /// machines.json is there but did not decode (damaged, or written by a newer Henge).
+    /// machines.json is there but did not decode (damaged, or written by a newer Monolith).
     private var listUnreadable = false
 
     private func load() {

@@ -69,15 +69,15 @@ enum JITNetworkAdvice {
         if problem == .pairing {
             return JITAdvice(
                 message: "This device closed the connection, which usually means it no longer accepts "
-                       + "Henge's pairing. Pair again, and check that LocalDevVPN is connected.",
+                       + "Monolith's pairing. Pair again, and check that LocalDevVPN is connected.",
                 actions: [.pairAgain, .connectLocalDevVPN])
         }
         guard situation == .cellularOnly else {
-            return JITAdvice(message: "Henge couldn't reach this device. Connect LocalDevVPN, then try again.",
+            return JITAdvice(message: "Monolith couldn't reach this device. Connect LocalDevVPN, then try again.",
                              actions: [.connectLocalDevVPN])
         }
         return JITAdvice(
-            message: "LocalDevVPN can show Connected while iOS still sends Henge's connection over cellular. "
+            message: "LocalDevVPN can show Connected while iOS still sends Monolith's connection over cellular. "
                    + "Turn Cellular Data off in Control Center, wait 2 seconds, then turn it back on. "
                    + "Or join any Wi-Fi once; a hotspot works. "
                    + "Keep LocalDevVPN connected, turn off other VPNs such as Tailscale, then try again.",

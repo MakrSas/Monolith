@@ -4,9 +4,9 @@ import Darwin
 import UIKit
 import os
 
-/// Everything Henge knows, in one chronological file.
+/// Everything Monolith knows, in one chronological file.
 ///
-/// The problem this solves: QEMU and Henge's own C code write diagnostics with
+/// The problem this solves: QEMU and Monolith's own C code write diagnostics with
 /// `fprintf(stderr, ...)`, and on iOS stderr goes nowhere a user can reach. So
 /// before anything else runs, stdout and stderr are redirected into a pipe that a
 /// reader thread drains, writing every line to three places at once:
@@ -15,7 +15,7 @@ import os
 ///   * `os_log`, so Console.app shows it live with the device attached
 ///   * an in-memory ring buffer the app can display without leaving the device
 ///
-/// Because QEMU's output and Henge's Swift logging both land in the same stream,
+/// Because QEMU's output and Monolith's Swift logging both land in the same stream,
 /// the ordering between "the JIT region was allocated" and "QEMU started
 /// translating" is preserved, which is exactly the ordering that matters when
 /// something goes wrong.
@@ -75,7 +75,7 @@ enum HengeLog {
         // Fresh file each launch. StikDebug relaunches us after attaching, so the
         // run that matters is always the most recent one; keeping the previous
         // run's noise would make the log harder to read, not easier.
-        // ...but the previous run is kept as henge-prev.log, because when a game took Henge down with it, that run's log is
+        // ...but the previous run is kept as henge-prev.log, because when a game took Monolith down with it, that run's log is
         // the crash report (CrashReport.swift).
         let url = logFileURL
         let prev = url.deletingLastPathComponent().appendingPathComponent("henge-prev.log")
@@ -344,7 +344,7 @@ enum HengeLog {
         let model = deviceModel
         let mem = ProcessInfo.processInfo.physicalMemory / (1024 * 1024)
 
-        log("boot", "================ Henge starting ================")
+        log("boot", "================ Monolith starting ================")
         log("boot", "device      : \(model)")
         log("boot", "system      : \(d.systemName) \(d.systemVersion)")
         log("boot", "physical RAM: \(mem) MiB")

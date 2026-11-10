@@ -79,7 +79,7 @@ struct MacSettingsView: View {
                             Text("16:9").tag("wide")
                         }
                         .pickerStyle(.segmented)
-                        Text("\(mac.screen.width) × \(mac.screen.height). \(Device.isPad ? "Performance renders about 30% fewer pixels. " : "")Changes apply the next time this Mac starts.")
+                        Text("\(mac.screen.width) × \(mac.screen.height). \(Device.isPad ? "Performance renders about 30% fewer pixels. " : "")Changes apply the next time this device starts.")
                             .font(.system(size: 13)).foregroundStyle(Desk.dim)
                     }
                     .padding(17)
@@ -129,7 +129,7 @@ struct MacSettingsView: View {
         VStack(spacing: 0) {
             if let name = machines.exporting {
                 VStack(alignment: .leading, spacing: 9) {
-                    Text("Exporting \(name)… keep Henge open").font(.system(size: 15))
+                    Text("Exporting \(name)… keep Monolith open").font(.system(size: 15))
                     DeskBar(fraction: machines.exported)
                 }
                 .padding(17)
@@ -139,16 +139,16 @@ struct MacSettingsView: View {
             if let folder = machines.lastExport {
                 divider
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Saved in Files, under Henge, Exports, \(folder.lastPathComponent). Deleting Henge deletes it too, so move it somewhere else first.")
+                    Text("Saved in Files, under Monolith, Exports, \(folder.lastPathComponent). Deleting Monolith deletes it too, so move it somewhere else first.")
                         .font(.system(size: 13)).foregroundStyle(Desk.dim)
-                    Button("Move Out of Henge…") { movingExport = true }
+                    Button("Move Out of Monolith…") { movingExport = true }
                         .font(.system(size: 15, weight: .semibold)).foregroundStyle(Desk.accentLight)
                 }
                 .padding(17)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             divider
-            row("Delete this Mac", symbol: nil, tint: Desk.bad) { confirmDelete = true }
+            row("Delete this device", symbol: nil, tint: Desk.bad) { confirmDelete = true }
         }
         .deskCard()
     }
@@ -169,7 +169,7 @@ struct MacSettingsView: View {
     }
 
     private func save() {
-        if mac.name.isEmpty { mac.name = "Mac" }
+        if mac.name.isEmpty { mac.name = "Device" }
         machines.update(mac)
     }
 }

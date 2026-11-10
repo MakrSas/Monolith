@@ -45,13 +45,14 @@ struct HomeView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        Button("Add Apple Watch…", systemImage: "applewatch") { picking = true }
+                        Button("Add Apple Watch or Apple TV…", systemImage: "applewatch") { picking = true }
+                        Divider()
                         Button("Install macOS…", systemImage: "macwindow") { tab = .install }
-                        Button("Bring in a machine from a folder…", systemImage: "folder") { picking = true }
+                        Button("Bring in a device from a folder…", systemImage: "folder") { picking = true }
                     } label: {
                         Image(systemName: "plus")
                     }
-                    .accessibilityLabel("Add a Mac")
+                    .accessibilityLabel("Add a device")
                 }
             }
             .fileImporter(isPresented: $picking, allowedContentTypes: [.folder]) { result in
@@ -93,14 +94,14 @@ struct HomeView: View {
                 .frame(height: 190)
                 .background(Desk.raised.opacity(0.5), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             Text("Nothing here yet").font(.system(size: 24, weight: .bold))
-            Text("Add an Apple Watch, install macOS on this \(Device.name), or bring in a machine made on a computer.")
+            Text("Add an Apple Watch or Apple TV, bring in a device made on a computer, or install macOS on this \(Device.name).")
                 .font(.system(size: 15)).foregroundStyle(Desk.dim).multilineTextAlignment(.center)
-            Button("Add Apple Watch") { picking = true }.buttonStyle(DeskButtonStyle())
-            Text("Pick the Apple Watch folder made on a Mac (tools/export_vphone.sh), from Files or a USB drive.")
+            Button("Add Apple Watch or Apple TV") { picking = true }.buttonStyle(DeskButtonStyle())
+            Text("Pick the device folder made on a computer (tools/export_vphone.sh), from Files or a USB drive.")
                 .font(.system(size: 13)).foregroundStyle(Desk.dim).multilineTextAlignment(.center)
-            Button("Install macOS") { tab = .install }
+            Button("Bring in a device from a folder") { picking = true }
                 .font(.system(size: 15, weight: .semibold)).foregroundStyle(Desk.accentLight)
-            Button("Bring in a machine from a folder") { picking = true }
+            Button("Install macOS on this \(Device.name)") { tab = .install }
                 .font(.system(size: 15, weight: .semibold)).foregroundStyle(Desk.accentLight)
         }
         .padding(14)
@@ -110,7 +111,7 @@ struct HomeView: View {
     @ViewBuilder private func others(besides shown: VirtualMac) -> some View {
         let rest = machines.all.filter { $0.id != shown.id }
         if !rest.isEmpty {
-            DeskHeading("Other Macs")
+            DeskHeading("Other devices")
             VStack(spacing: 0) {
                 ForEach(rest) { other in
                     Button { chosen = other.id } label: {

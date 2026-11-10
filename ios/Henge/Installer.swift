@@ -14,13 +14,13 @@ struct MacOSRelease: Identifiable, Hashable {
     static let all: [MacOSRelease] = [
         MacOSRelease(id: "24G90", name: "macOS Sequoia 15.6.1",
                      url: URL(string: "https://updates.cdn-apple.com/2025SummerFCS/fullrestores/093-10809/CFD6DD38-DAF0-40DA-854F-31AAD1294C6F/UniversalMac_15.6.1_24G90_Restore.ipsw")!,
-                     bytes: 16_035 << 20, note: "Recommended: the version Henge is tested with."),
+                     bytes: 16_035 << 20, note: "Recommended: the version Monolith is tested with."),
         MacOSRelease(id: "25G83", name: "macOS Tahoe 26.6.2",
                      url: URL(string: "https://updates.cdn-apple.com/2026SummerFCS/fullrestores/140-75212/A2A24B94-1FC1-45A3-93F7-C51B02AF1F4D/UniversalMac_26.6.2_25G83_Restore.ipsw")!,
-                     bytes: 18_856 << 20, note: "Not tested with Henge yet."),
+                     bytes: 18_856 << 20, note: "Not tested with Monolith yet."),
         MacOSRelease(id: "26B123", name: "macOS 27.2",
                      url: URL(string: "https://updates.cdn-apple.com/2026FallFCS/c9671975-52db-4fb5-9af2-00217169ba8d/UniversalMac_27.2_26B123_Restore.ipsw")!,
-                     bytes: 24_409 << 20, note: "The newest. Not tested with Henge yet."),
+                     bytes: 24_409 << 20, note: "The newest. Not tested with Monolith yet."),
     ]
 }
 
@@ -92,7 +92,7 @@ final class Installer: NSObject, ObservableObject {
         guard !busy else { return }
         machineName = name
         UIApplication.shared.isIdleTimerDisabled = true // the screen locking would suspend the download and the restore
-        grace = UIApplication.shared.beginBackgroundTask(withName: "Henge install") {
+        grace = UIApplication.shared.beginBackgroundTask(withName: "Monolith install") {
             MainActor.assumeIsolated { Installer.shared.endGrace() }
         }
         Task {
@@ -111,7 +111,7 @@ final class Installer: NSObject, ObservableObject {
                 try await install(mac, ipsw: ipsw, cpus: cpus)
                 if !keepImage { try? FileManager.default.removeItem(at: ipsw) }
                 HengeLog.log("install", "\(name): installed \(release.name)")
-                phase = .done("\(release.name) is installed on \(name). Quit Henge (swipe it away) and open it again, then tap Start.")
+                phase = .done("\(release.name) is installed on \(name). Quit Monolith (swipe it away) and open it again, then tap Start.")
             } catch {
                 HengeLog.log("install", "failed: \(error.localizedDescription)")
                 // A half-installed Mac is no use, and its disk can be many gigabytes. The download stays.
@@ -201,7 +201,7 @@ final class Installer: NSObject, ObservableObject {
         guard JITBootstrap.ready else { throw message("Turn on JIT first: the installer runs the Mac's own restore system, which needs it.") }
         // The restore needs 2 GB, whatever the Mac is set to use afterwards, and gets at most 4 GB: the restore system
         // caches the ~15 GB it writes, so it fills all the memory it is given, and 10 GB of a 12 GB iPhone's RAM in use
-        // (it is outside Henge's footprint, so iOS does not stop it) stalls the whole phone two thirds of the way through.
+        // (it is outside Monolith's footprint, so iOS does not stop it) stalls the whole phone two thirds of the way through.
         var restoring = mac
         restoring.ramMB = min(max(mac.ramMB, 2048), 4096)
         let ram = GuestMemory.prepare(restoring)
@@ -227,11 +227,11 @@ final class Installer: NSObject, ObservableObject {
                 throw message("The machine stopped during the restore (\(String(cString: henge_vm_exit_reason()))).")
             }
         }
-        // In the list before anything else: stopping the restore system can take a while, and if Henge is
+        // In the list before anything else: stopping the restore system can take a while, and if Monolith is
         // stopped meanwhile (the phone locked) a finished Mac must not be left on the disk unlisted.
         try? (mac.osName ?? "").write(to: mac.directory.appendingPathComponent(Machines.installedMarker), atomically: true, encoding: .utf8)
         Machines.shared.add(mac)
-        HengeLog.log("install", "\(mac.name): restore finished, added to the Macs")
+        HengeLog.log("install", "\(mac.name): restore finished, added to Devices")
         if henge_vm_state() == 1 { henge_vm_stop() }
         try? FileManager.default.removeItem(at: work)
     }

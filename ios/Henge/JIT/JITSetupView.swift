@@ -65,7 +65,7 @@ struct JITSetupFlow: View {
 
     private var choose: some View {
         page(symbol: "bolt.fill", title: "Turn on JIT",
-             subtitle: "A Mac needs memory it can write and then run, which on iOS only an attached "
+             subtitle: "A virtual device needs memory it can write and then run, which on iOS only an attached "
                      + "debugger can grant. Choose how your \(device) gets one.") {
             VStack(spacing: 10) {
                 let builtIn = HengeBuiltInJIT.unavailableReason
@@ -86,10 +86,10 @@ struct JITSetupFlow: View {
                     done: jit.method == .stikDebug) { path.append(.stikDebug) }
                 way("Use TrollStore", symbol: "sparkles",
                     detail: JITBootstrap.isTrollStoreInstalled ? "TrollStore is installed."
-                        : "For a Henge installed through TrollStore.",
+                        : "For a Monolith installed through TrollStore.",
                     done: jit.method == .trollStore) { path.append(.trollStore) }
                 way("Use a jailbreak", symbol: "lock.open",
-                    detail: JITBootstrap.debuggedAtLaunch ? "JIT was already on when Henge opened."
+                    detail: JITBootstrap.debuggedAtLaunch ? "JIT was already on when Monolith opened."
                         : JITBootstrap.isJailbroken ? "A jailbreak was found. Turn on Allow JIT in Apps."
                         : "Dopamine can give every app JIT with one setting.",
                     done: jit.method == .jailbreak || JITBootstrap.debuggedAtLaunch) { path.append(.jailbreak) }
@@ -146,18 +146,18 @@ struct JITSetupFlow: View {
 
     private var pairOnDevice: some View {
         page(symbol: "iphone.radiowaves.left.and.right", title: "Pair on this \(device)",
-             subtitle: "Henge pretends to be a computer on your Wi-Fi, and your \(device) pairs with it "
-                     + "the way it would with a Mac.") {
+             subtitle: "Monolith pretends to be a computer on your Wi-Fi, and your \(device) pairs with it "
+                     + "the way it would with a computer.") {
             VStack(alignment: .leading, spacing: 14) {
                 point(1, "Turn on Wi-Fi, tap **Start pairing** below and allow Local Network access.",
                       done: pairing.phase != .idle)
                 point(2, "Open **Settings › Privacy & Security › Developer Mode**, scroll down and tap "
                        + "**Pair with \(OnDevicePairing.hostName)**.",
                       done: pairing.isShowingPin || pairedOnDevice)
-                point(3, "Enter the code Henge shows. It also appears in a banner and a notification, "
+                point(3, "Enter the code Monolith shows. It also appears in a banner and a notification, "
                        + "so you don't have to switch back.",
                       done: pairedOnDevice)
-                point(4, "Come back to Henge.", done: pairedOnDevice)
+                point(4, "Come back to Monolith.", done: pairedOnDevice)
             }
             .padding(16).hengeCard()
             pairingStatus
@@ -225,7 +225,7 @@ struct JITSetupFlow: View {
 
     private var importFile: some View {
         page(symbol: "doc.badge.plus", title: "Use a pairing file",
-             subtitle: "A pairing file made on a computer lets Henge talk to this \(device) the same way.") {
+             subtitle: "A pairing file made on a computer lets Monolith talk to this \(device) the same way.") {
             VStack(alignment: .leading, spacing: 14) {
                 point(1, "On a computer, make this \(device)'s pairing file with the "
                        + "[StikDebug pairing-file guide](https://github.com/StikDebug/StikDebug-Guide/blob/main/pairing_file.md).",
@@ -235,7 +235,7 @@ struct JITSetupFlow: View {
                 point(3, "Tap **Choose pairing file** and pick it.", done: jit.pairingSource == .imported)
             }
             .padding(16).hengeCard()
-            Label("The pairing file stays in Henge's Documents folder and is only sent to Henge's own helper.",
+            Label("The pairing file stays in Monolith's Documents folder and is only sent to Monolith's own helper.",
                   systemImage: "lock.fill")
                 .font(.system(size: 13)).foregroundStyle(Theme.textDim)
             if let error = jit.error { outcome(error, ok: false) }
@@ -255,12 +255,12 @@ struct JITSetupFlow: View {
 
     private var connect: some View {
         page(symbol: "network.badge.shield.half.filled", title: "Connect LocalDevVPN",
-             subtitle: "Henge's helper reaches this \(device)'s debugging service through a local VPN. "
+             subtitle: "Monolith's helper reaches this \(device)'s debugging service through a local VPN. "
                      + "Nothing leaves your \(device).") {
             VStack(alignment: .leading, spacing: 14) {
                 point(1, "Install [LocalDevVPN](\(LocalDevVPN.appStore.absoluteString)) from the App Store.",
                       done: LocalDevVPN.isInstalled)
-                point(2, "Tap **Connect LocalDevVPN**. It switches the VPN on and comes straight back to Henge.")
+                point(2, "Tap **Connect LocalDevVPN**. It switches the VPN on and comes straight back to Monolith.")
                 point(3, "Leave it connected whenever you turn JIT on.")
             }
             .padding(16).hengeCard()
@@ -281,9 +281,9 @@ struct JITSetupFlow: View {
              subtitle: "The first check downloads and mounts Apple's Developer Disk Image, "
                      + "which can take a minute.") {
             VStack(alignment: .leading, spacing: 14) {
-                point(1, "Tap **Check setup**. Henge checks LocalDevVPN and prepares the Developer Disk Image.",
+                point(1, "Tap **Check setup**. Monolith checks LocalDevVPN and prepares the Developer Disk Image.",
                       done: jit.prepared || attached)
-                point(2, "Tap **Enable JIT**. Henge's helper attaches and a Mac can start.", done: attached)
+                point(2, "Tap **Enable JIT**. Monolith's helper attaches and a device can start.", done: attached)
             }
             .padding(16).hengeCard()
 
@@ -295,7 +295,7 @@ struct JITSetupFlow: View {
                 }
                 .padding(16).hengeCard(high: true)
             } else if attached {
-                outcome("JIT is on. a Mac can start.", ok: true)
+                outcome("JIT is on. A device can start.", ok: true)
             } else if let error = jit.error {
                 VStack(alignment: .leading, spacing: 10) {
                     outcome(error, ok: false)
@@ -339,14 +339,14 @@ struct JITSetupFlow: View {
 
     private var stikDebug: some View {
         page(symbol: "ant", title: "Use StikDebug",
-             subtitle: "StikDebug is a separate app that attaches to Henge. Henge sends it the JIT script "
-                     + "itself, so nothing needs configuring for Henge inside StikDebug.") {
+             subtitle: "StikDebug is a separate app that attaches to Monolith. Monolith sends it the JIT script "
+                     + "itself, so nothing needs configuring for Monolith inside StikDebug.") {
             VStack(alignment: .leading, spacing: 14) {
                 point(1, "Install [StikDebug](https://github.com/StikDebug/StikDebug/releases/latest).",
                       done: JITBootstrap.isStikDebugInstalled)
                 point(2, "Import this \(device)'s pairing file into StikDebug.")
                 point(3, "Install and connect [LocalDevVPN](\(LocalDevVPN.appStore.absoluteString)).")
-                point(4, "Whenever you start a Mac, Henge opens StikDebug, which attaches and comes back.")
+                point(4, "Whenever you start a device, Monolith opens StikDebug, which attaches and comes back.")
             }
             .padding(16).hengeCard()
         } actions: {
@@ -366,11 +366,11 @@ struct JITSetupFlow: View {
              subtitle: "TrollStore can enable JIT for apps it installed, with no pairing file, "
                      + "VPN or computer.") {
             VStack(alignment: .leading, spacing: 14) {
-                point(1, "Install Henge.ipa through TrollStore, on an iOS version TrollStore supports. It carries the "
+                point(1, "Install Monolith.ipa through TrollStore, on an iOS version TrollStore supports. It carries the "
                        + "entitlements TrollStore keeps, so the same file works there and in a sideloader.",
                       done: JITBootstrap.isInstalledWithTrollStore)
                 point(2, "In TrollStore's Settings, turn on URL Scheme. TrollStore ignores enable-jit requests without it.")
-                point(3, "Whenever a Mac starts, Henge asks TrollStore to enable JIT. TrollStore opens Henge, "
+                point(3, "Whenever a device starts, Monolith asks TrollStore to enable JIT. TrollStore opens Monolith, "
                        + "attaches to it for a moment and lets go, which leaves it allowed to run code it wrote.")
             }
             .padding(16).hengeCard()
@@ -394,16 +394,16 @@ struct JITSetupFlow: View {
     private var jailbreak: some View {
         page(symbol: "lock.open", title: "Use a jailbreak",
              subtitle: "On a device jailbroken with Dopamine, JIT is a setting: the jailbreak marks every app as "
-                     + "debugged when it opens, and a debugged app may run code it wrote. Henge needs nothing else.") {
+                     + "debugged when it opens, and a debugged app may run code it wrote. Monolith needs nothing else.") {
             VStack(alignment: .leading, spacing: 14) {
                 point(1, "Open Dopamine and go to its Settings.", done: JITBootstrap.isJailbroken)
                 point(2, "Turn on Allow JIT in Apps.")
-                point(3, "Close Henge completely and open it again. The setting applies to apps as they start.",
+                point(3, "Close Monolith completely and open it again. The setting applies to apps as they start.",
                       done: JITBootstrap.debuggedAtLaunch)
             }
             .padding(16).hengeCard()
             if JITBootstrap.debuggedAtLaunch {
-                Label("Henge was marked as debugged when it opened, so JIT is on.", systemImage: "checkmark.circle.fill")
+                Label("Monolith was marked as debugged when it opened, so JIT is on.", systemImage: "checkmark.circle.fill")
                     .font(.system(size: 13)).foregroundStyle(.green)
             } else if !JITBootstrap.isJailbroken {
                 Label("No jailbreak was found on this \(device).", systemImage: "info.circle")

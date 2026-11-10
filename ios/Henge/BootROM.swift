@@ -2,7 +2,7 @@ import Compression
 import CryptoKit
 import Foundation
 
-/// The virtual Mac's boot ROM, AVPBooter. It is Apple's, so it isn't part of Henge: the app fetches it from Apple.
+/// The virtual device's boot ROM, AVPBooter. It is Apple's, so it isn't part of Monolith: the app fetches it from Apple.
 ///
 /// macOS keeps it in the system image, and since macOS 15 those are encrypted, but Apple's macOS 14.6.1 restore image
 /// is not, and its ROM boots and installs later versions. The file there is one piece of one compressed block, so one
@@ -19,8 +19,8 @@ enum BootROM {
         case download(String), damaged
         var errorDescription: String? {
             switch self {
-            case .download(let why): return "Henge couldn't get the Mac's boot ROM from Apple (\(why)). Check the connection and try again."
-            case .damaged: return "The Mac's boot ROM from Apple wasn't what Henge expected, so it wasn't used. Check the connection and try again, or look for an update to Henge."
+            case .download(let why): return "Monolith couldn't get the device's boot ROM from Apple (\(why)). Check the connection and try again."
+            case .damaged: return "The device's boot ROM from Apple wasn't what Monolith expected, so it wasn't used. Check the connection and try again, or look for an update to Monolith."
             }
         }
     }

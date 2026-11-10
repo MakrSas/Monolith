@@ -20,12 +20,12 @@ struct SettingsView: View {
                     Picker("Method", selection: $jit.method) {
                         ForEach(JITMethod.allCases) { Text($0.title).tag($0) }
                     }
-                    Text(jit.method == .automatic ? jit.automaticDescription : "Henge uses \(jit.method.title).")
+                    Text(jit.method == .automatic ? jit.automaticDescription : "Monolith uses \(jit.method.title).")
                         .font(.footnote).foregroundStyle(.secondary)
                     Button("Set up JIT") { jit.showSetup = true }
-                    Toggle("Turn on JIT when Henge opens", isOn: $jitAtLaunch)
+                    Toggle("Turn on JIT when Monolith opens", isOn: $jitAtLaunch)
                     if jitAtLaunch {
-                        Text("Henge connects LocalDevVPN first when it is off, and comes back.")
+                        Text("Monolith connects LocalDevVPN first when it is off, and comes back.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     LabeledContent("Code region", value: "\(JITBootstrap.jitBytes >> 20) MB, claimed once per launch")
@@ -33,11 +33,11 @@ struct SettingsView: View {
                 .listRowBackground(Desk.card)
                 Section("Memory") {
                     LabeledContent("Extra memory", value: Entitlements.increasedMemory ? "On" : "Off")
-                    LabeledContent("Henge's limit", value: ByteText.string(UInt64(Entitlements.memoryLimitAtLaunch)))
-                    LabeledContent("Free for Henge", value: ByteText.string(UInt64(henge_available_memory())))
+                    LabeledContent("Monolith's limit", value: ByteText.string(UInt64(Entitlements.memoryLimitAtLaunch)))
+                    LabeledContent("Free for Monolith", value: ByteText.string(UInt64(henge_available_memory())))
                     Text(Entitlements.increasedMemory
-                         ? "A Mac's memory is kept out of this limit once JIT is on. If iOS refuses that, it uses free storage instead."
-                         : "This install isn't signed with the increased memory limit entitlement. Reinstall Henge with a certificate that has it. Export your Mac first if the reinstall replaces the app's data.")
+                         ? "A guest's memory is kept out of this limit once JIT is on. If iOS refuses that, it uses free storage instead."
+                         : "This install isn't signed with the increased memory limit entitlement. Reinstall Monolith with a certificate that has it. Export this device first if the reinstall replaces the app's data.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 .listRowBackground(Desk.card)
@@ -52,13 +52,13 @@ struct SettingsView: View {
                             Text("Scroll speed")
                             Slider(value: $scrollSpeed, in: 0.1...1.5)
                         }
-                        Text("A Magic Keyboard or a Bluetooth mouse moves the Mac's pointer. Pointer speed changes apply the next time a Mac starts; scroll speed changes apply immediately.")
+                        Text("A Magic Keyboard or a Bluetooth mouse moves the device's pointer. Pointer speed changes apply the next time a device starts; scroll speed changes apply immediately.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     .listRowBackground(Desk.card)
                 }
                 Section("Performance") {
-                    Picker("Mac refresh rate", selection: $refreshRate) {
+                    Picker("Refresh rate", selection: $refreshRate) {
                         Text("30 Hz").tag(30)
                         Text("60 Hz").tag(60)
                         Text("120 Hz").tag(120)
@@ -71,9 +71,9 @@ struct SettingsView: View {
                         Text("1 GB").tag(1024)
                         Text("1.5 GB").tag(1536)
                     }
-                    Text("A bigger code cache empties less often and takes more memory; Henge picks 1.5 GB where there is room for it. Applies the next time Henge opens. If JIT stops turning on, choose 1 GB.")
+                    Text("A bigger code cache empties less often and takes more memory; Monolith picks 1.5 GB where there is room for it. Applies the next time Monolith opens. If JIT stops turning on, choose 1 GB.")
                         .font(.footnote).foregroundStyle(.secondary)
-                    Text("macOS draws a frame for every refresh: 30 Hz leaves the most of the emulated CPU to apps, at the cost of choppier animation; 60 Hz is smoother. Faster disk writes order them without waiting for a full sync; a sudden power loss could lose the last ones. Quicker wake keeps an idle CPU watching for work for 50 µs, at some battery cost. Superblocks let translated code run past conditional branches. Changes apply the next time a Mac starts.")
+                    Text("macOS draws a frame for every refresh: 30 Hz leaves the most of the emulated CPU to apps, at the cost of choppier animation; 60 Hz is smoother. Faster disk writes order them without waiting for a full sync; a sudden power loss could lose the last ones. Quicker wake keeps an idle CPU watching for work for 50 µs, at some battery cost. Superblocks let translated code run past conditional branches. Changes apply the next time a device starts.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 .listRowBackground(Desk.card)

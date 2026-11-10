@@ -4,7 +4,7 @@ import Network
 import SwiftUI
 import UIKit
 
-/// How Henge gets a debugger attached. See docs/06-built-in-jit.md.
+/// How Monolith gets a debugger attached. See docs/06-built-in-jit.md.
 enum JITMethod: String, CaseIterable, Identifiable {
     /// TrollStore or jailbreak first, then a paired built-in helper or StikDebug.
     case automatic
@@ -27,7 +27,7 @@ enum JITMethod: String, CaseIterable, Identifiable {
 
 /// Where Built-in StikJIT's pairing file came from.
 enum JITPairingSource: String {
-    /// Made by Henge on this device (iOS 27, OnDevicePairing).
+    /// Made by Monolith on this device (iOS 27, OnDevicePairing).
     case onDevice
     /// Imported from a file made on a computer.
     case imported
@@ -35,7 +35,7 @@ enum JITPairingSource: String {
 
 /// The RPPairing file Built-in StikJIT authenticates with. Lives in Documents,
 /// so it is visible through Finder file sharing -- it is device-sensitive and
-/// is only ever sent to Henge's own helper process.
+/// is only ever sent to Monolith's own helper process.
 enum JITPairingFileStore {
     static var directory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -94,7 +94,7 @@ final class JITCoordinator: ObservableObject {
     /// The setup check passed for the current pairing file.
     @Published private(set) var prepared = false
     @Published private(set) var pairingSource = JITPairingFileStore.source
-    /// Bumped each time the built-in helper attaches. Henge stays in the
+    /// Bumped each time the built-in helper attaches. Monolith stays in the
     /// foreground for that, so nothing else tells ContentView to claim the region.
     @Published private(set) var attachGeneration = 0
 
@@ -130,12 +130,12 @@ final class JITCoordinator: ObservableObject {
 
     var automaticDescription: String {
         switch resolvedMethod {
-        case .stikDebug: return "StikDebug is installed, so Henge will open it."
-        case .trollStore: return "TrollStore is installed, so Henge will ask it to enable JIT."
+        case .stikDebug: return "StikDebug is installed, so Monolith will open it."
+        case .trollStore: return "TrollStore is installed, so Monolith will ask it to enable JIT."
         case .jailbreak: return "This device is jailbroken, so JIT comes from the jailbreak's Allow JIT in Apps setting."
         default: return hasPairing
-            ? "Henge will use its paired built-in helper."
-            : "StikDebug, TrollStore and a jailbreak were not found, so Henge will use its built-in helper."
+            ? "Monolith will use its paired built-in helper."
+            : "StikDebug, TrollStore and a jailbreak were not found, so Monolith will use its built-in helper."
         }
     }
 
@@ -147,14 +147,14 @@ final class JITCoordinator: ObservableObject {
 
     /// Get a debugger attached with whichever method applies, or open the setup
     /// walkthrough when that method is not set up yet.
-    /// "Turn on JIT at launch": when Henge opens without JIT, ask the built-in StikJIT for it straight away, once per launch.
-    /// Only when StikJIT can do it unattended -- it is available here and already paired -- so opening Henge never lands in
+    /// "Turn on JIT at launch": when Monolith opens without JIT, ask the built-in StikJIT for it straight away, once per launch.
+    /// Only when StikJIT can do it unattended -- it is available here and already paired -- so opening Monolith never lands in
     /// the setup walkthrough by surprise.
     static let autoEnableKey = "henge.jit.autoEnable"
     private var autoTried = false
 
-    /// A Henge TrollStore installed asks TrollStore for JIT each time it opens without it (#135), unless turned off in Settings:
-    /// TrollStore attaches to the running Henge for a moment, with nothing to tap.
+    /// A Monolith TrollStore installed asks TrollStore for JIT each time it opens without it (#135), unless turned off in Settings:
+    /// TrollStore attaches to the running Monolith for a moment, with nothing to tap.
     static let trollStoreAutoKey = "henge.jit.trollStoreAuto"
     static var trollStoreAuto: Bool { UserDefaults.standard.object(forKey: trollStoreAutoKey) as? Bool ?? true }
 
@@ -222,12 +222,12 @@ final class JITCoordinator: ObservableObject {
             if JITBootstrap.requestTrollStoreAttach() {
                 awaitTrollStore()
             } else {
-                error = "TrollStore could not be opened. Install Henge through TrollStore, or choose another method."
+                error = "TrollStore could not be opened. Install Monolith through TrollStore, or choose another method."
                 showSetup = true
             }
         case .jailbreak:
             // Nothing to ask: a jailbreak marks an app as debugged as it opens, if it has been told to. Say what to turn on.
-            error = "Turn on Allow JIT in Apps in Dopamine's settings, then open Henge again."
+            error = "Turn on Allow JIT in Apps in Dopamine's settings, then open Monolith again."
             showSetup = true
         case .builtIn:
             guard HengeBuiltInJIT.isAvailable, hasPairing else {
@@ -239,7 +239,7 @@ final class JITCoordinator: ObservableObject {
         }
     }
 
-    /// After TrollStore is asked: it opens Henge again and attaches to it for a moment, which marks the process as debugged. Watch for
+    /// After TrollStore is asked: it opens Monolith again and attaches to it for a moment, which marks the process as debugged. Watch for
     /// that, so the Games tab and the Library notice without waiting for another trip to the foreground, and say what to check if
     /// it never comes -- TrollStore only answers enable-jit once its URL Scheme setting is on.
     private func awaitTrollStore() {
@@ -256,7 +256,7 @@ final class JITCoordinator: ObservableObject {
                 log("TrollStore enabled JIT")
             } else {
                 status = nil
-                error = "TrollStore did not enable JIT. In TrollStore's Settings turn on URL Scheme, and make sure Henge was "
+                error = "TrollStore did not enable JIT. In TrollStore's Settings turn on URL Scheme, and make sure Monolith was "
                       + "installed through TrollStore (or is signed with get-task-allow)."
                 log("TrollStore did not enable JIT within a minute")
                 showSetup = true
@@ -348,7 +348,7 @@ final class JITCoordinator: ObservableObject {
     func enableBuiltIn(attempt: Int = 1) {
         guard let pairing = builtInPairing() else { return }
         guard let script = JITBootstrap.scriptBase64 else {
-            error = "Henge's JIT script is missing from this installation. Reinstall Henge."
+            error = "Monolith's JIT script is missing from this installation. Reinstall Monolith."
             return
         }
 
@@ -356,7 +356,7 @@ final class JITCoordinator: ObservableObject {
         error = nil
         connectionProblem = nil
         advice = nil
-        if attempt == 1 { status = "Starting Henge's JIT helper…" }
+        if attempt == 1 { status = "Starting Monolith's JIT helper…" }
         log("enabling JIT with the built-in helper" + (attempt > 1 ? " (attempt \(attempt))" : ""))
         var readiness: Timer?
         var finished = false
@@ -389,7 +389,7 @@ final class JITCoordinator: ObservableObject {
                     }
                 },
                 completion: { [weak self] result in
-                    // The helper replies once Henge detaches, or when attaching failed.
+                    // The helper replies once Monolith detaches, or when attaching failed.
                     switch result {
                     case .success(let response):
                         self?.txmPresent = response.txmPresent
@@ -490,7 +490,7 @@ final class JITCoordinator: ObservableObject {
 /// open it to connect when it is installed, otherwise its App Store page.
 enum LocalDevVPN {
     static let appStore = URL(string: "https://apps.apple.com/us/app/localdevvpn/id6755608044")!
-    /// `enable` connects the VPN; `scheme` has LocalDevVPN return to Henge afterwards.
+    /// `enable` connects the VPN; `scheme` has LocalDevVPN return to Monolith afterwards.
     static let connect = URL(string: "localdevvpn://enable?scheme=monolith")!
 
     static var isInstalled: Bool { UIApplication.shared.canOpenURL(URL(string: "localdevvpn://")!) }

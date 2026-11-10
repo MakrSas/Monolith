@@ -53,7 +53,7 @@ enum Sharing {
     }
 
     /// Types the set up command at the Mac's cursor, and stops there: the person using the Mac presses Return.
-    /// Henge can't see what has the keyboard, so it must not submit anything by itself. Opening Terminal for them
+    /// Monolith can't see what has the keyboard, so it must not submit anything by itself. Opening Terminal for them
     /// through Spotlight was tried: when Spotlight was slow the text went to a web search, and it could as easily
     /// have gone to a chat.
     static func typeSetUpCommand() async {

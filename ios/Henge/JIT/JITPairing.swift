@@ -11,14 +11,14 @@ import UserNotifications
 /// iOS 27 can pair with a computer it finds on the local network, started from
 /// the iPhone: Settings › Privacy & Security › Developer Mode lists every
 /// `_remotepairing-pairable-host._tcp` service, and pairing with one asks for the
-/// PIN that host shows. Henge plays that computer for its own iPhone:
+/// PIN that host shows. Monolith plays that computer for its own iPhone:
 /// libhenge_rppairing (src/rppairing-ios, idevice's PairableHost) listens on a
 /// port and runs the pairing; this publishes the port through mDNSResponder
 /// (dns_sd, so only the Local Network permission is needed, not the multicast
 /// entitlement) and stores the resulting RPPairing file where Built-in StikJIT
 /// reads it.
 ///
-/// The user pairs from Settings, so Henge has to keep running in the background:
+/// The user pairs from Settings, so Monolith has to keep running in the background:
 /// a BGContinuedProcessingTask ("<bundle id>.pairing.session", permitted by
 /// `$(PRODUCT_BUNDLE_IDENTIFIER).pairing.*` in Info.plist) whose system progress
 /// UI also shows the PIN. When iOS refuses it (a re-signed bundle whose
@@ -29,7 +29,7 @@ import UserNotifications
 @MainActor final class OnDevicePairing: ObservableObject {
     static let shared = OnDevicePairing()
 
-    /// Shown on the iPhone as "Pair with Henge"; the host identifier is derived from it.
+    /// Shown on the iPhone as "Pair with Monolith"; the host identifier is derived from it.
     static let hostName = "Henge"
     static let timeout: TimeInterval = 300
 
@@ -44,7 +44,7 @@ import UserNotifications
     }
 
     @Published private(set) var phase: Phase = .idle
-    /// iOS refused the continued-processing task: Henge can only wait briefly in the background.
+    /// iOS refused the continued-processing task: Monolith can only wait briefly in the background.
     @Published private(set) var backgroundLimited = false
 
     static var isSupported: Bool {
@@ -79,7 +79,7 @@ import UserNotifications
         guard Self.isSupported, !active, session == nil else { return }
         var error: UnsafeMutablePointer<CChar>?
         guard let session = husk_rppairing_new(Self.hostName, &error) else {
-            fail(Self.take(error) ?? "Henge could not open its pairing port.")
+            fail(Self.take(error) ?? "Monolith could not open its pairing port.")
             return
         }
         self.session = session
@@ -140,12 +140,12 @@ import UserNotifications
         log("code shown")
         #if compiler(>=6.2)
         if #available(iOS 26.0, *), let task = continued as? BGContinuedProcessingTask {
-            task.updateTitle("Pairing code \(pin)", subtitle: "Enter it on this \(Self.deviceKind) to pair with Henge")
+            task.updateTitle("Pairing code \(pin)", subtitle: "Enter it on this \(Self.deviceKind) to pair with Monolith")
             task.progress.completedUnitCount = 1
         }
         #endif
         if UIApplication.shared.applicationState != .active {
-            notify("Henge pairing code: \(pin)", body: "Enter this code on your \(Self.deviceKind) to finish pairing.")
+            notify("Monolith pairing code: \(pin)", body: "Enter this code on your \(Self.deviceKind) to finish pairing.")
         }
     }
 
@@ -163,11 +163,11 @@ import UserNotifications
                 phase = .paired(device: device ?? "this \(Self.deviceKind)")
                 log("paired")
                 if UIApplication.shared.applicationState != .active {
-                    notify("Paired with Henge", body: "Return to Henge to finish setting up JIT.")
+                    notify("Paired with Monolith", body: "Return to Monolith to finish setting up JIT.")
                 }
                 endBackground(success: true)
             } catch {
-                fail("Pairing finished, but Henge could not save the pairing file.")
+                fail("Pairing finished, but Monolith could not save the pairing file.")
             }
         case 2:
             endBackground(success: false)
@@ -224,8 +224,8 @@ import UserNotifications
         guard active else { return }
         log("advertising failed error=\(error)")
         fail(error == DNSServiceErrorType(kDNSServiceErr_PolicyDenied)
-             ? "Henge needs Local Network access to pair. Allow it in Settings › Apps › Henge, then try again."
-             : "Henge could not announce itself on the local network. Check that Wi-Fi is on, then try again.")
+             ? "Monolith needs Local Network access to pair. Allow it in Settings › Apps › Monolith, then try again."
+             : "Monolith could not announce itself on the local network. Check that Wi-Fi is on, then try again.")
     }
 
     private func stopAdvertising() {
@@ -243,11 +243,11 @@ import UserNotifications
     }
 
     private func beginBackground() {
-        grace = UIApplication.shared.beginBackgroundTask(withName: "Henge pairing") {
+        grace = UIApplication.shared.beginBackgroundTask(withName: "Monolith pairing") {
             MainActor.assumeIsolated {
                 let pairing = OnDevicePairing.shared
                 if pairing.continued == nil && pairing.active {
-                    pairing.cancel(reason: "iOS stopped Henge in the background before pairing finished. "
+                    pairing.cancel(reason: "iOS stopped Monolith in the background before pairing finished. "
                                          + "Try again, and pair from Settings straight away.")
                 }
                 pairing.endGrace()
@@ -272,7 +272,7 @@ import UserNotifications
             guard ok else { log("register refused"); backgroundLimited = true; return }
             registered = identifier
         }
-        let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: "Pairing with Henge",
+        let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: "Pairing with Monolith",
                                                        subtitle: "Settings › Privacy & Security › Developer Mode")
         request.strategy = .fail
         do {
@@ -290,7 +290,7 @@ import UserNotifications
         continued = task
         task.progress.totalUnitCount = 2
         if case .pin(let pin) = phase {
-            task.updateTitle("Pairing code \(pin)", subtitle: "Enter it on this \(Self.deviceKind) to pair with Henge")
+            task.updateTitle("Pairing code \(pin)", subtitle: "Enter it on this \(Self.deviceKind) to pair with Monolith")
             task.progress.completedUnitCount = 1
         }
         task.expirationHandler = {
