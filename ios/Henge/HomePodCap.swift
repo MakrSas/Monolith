@@ -17,13 +17,13 @@ struct HomePodCap: View {
                 Circle().fill(Color(white: 0.06))
                 ForEach(leds.indices, id: \.self) { i in
                     let led = leds[i]
-                    Circle()
-                        .fill(led.color)
-                        .frame(width: side * (led.ring == 0 ? 0.42 : led.ring == 1 ? 0.32 : 0.26),
-                               height: side * (led.ring == 0 ? 0.42 : led.ring == 1 ? 0.32 : 0.26))
-                        .blur(radius: side * 0.06)
+                    let r = side * (led.ring == 0 ? 0.16 : led.ring == 1 ? 0.13 : 0.11)
+                    Circle() // one LED under the diffuser: a soft spot, added to its neighbours' light
+                        .fill(RadialGradient(colors: [led.color, led.color.opacity(0.5), .clear],
+                                             center: .center, startRadius: 0, endRadius: r))
+                        .frame(width: r * 2, height: r * 2)
                         .position(x: led.x * side, y: (1 - led.y) * side)
-                        .blendMode(.screen)
+                        .blendMode(.plusLighter)
                 }
                 Image(systemName: "minus")
                     .font(.system(size: side * 0.12, weight: .light))
