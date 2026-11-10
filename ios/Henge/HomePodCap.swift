@@ -25,11 +25,6 @@ struct HomePodCap: View {
                         .position(x: led.x * side, y: (1 - led.y) * side)
                         .blendMode(.screen)
                 }
-                if let b = pressed { // the finger, until the guest's own light answers
-                    Circle().fill(.white.opacity(holding ? 0.35 : 0.2))
-                        .frame(width: side * 0.3, height: side * 0.3).blur(radius: side * 0.05)
-                        .position(x: side * (b == 1 ? 0.22 : b == 2 ? 0.78 : 0.5), y: side * 0.5)
-                }
                 Image(systemName: "minus")
                     .font(.system(size: side * 0.12, weight: .light))
                     .foregroundStyle(.white.opacity(0.15 + 0.85 * minus))
