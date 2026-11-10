@@ -1016,6 +1016,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--display")) { /* WxH, in --phone mode */
             unsigned w = 0, h = 0;
             if (sscanf(argv[++i], "%ux%u", &w, &h) == 2 && w && h) hv_pvg_lite_set_mode(w, h);
+            { unsigned mw, mh; if (getenv("HV_DISPLAY_MM") && sscanf(getenv("HV_DISPLAY_MM"), "%ux%u", &mw, &mh) == 2) hv_pvg_lite_set_size_mm(mw, mh); }
         }
         else if (!strcmp(argv[i], "--disk")) disk_path = argv[++i];
         else if (!strcmp(argv[i], "--aux")) aux_path = argv[++i];

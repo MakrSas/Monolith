@@ -64,8 +64,8 @@ struct HomePodCap: View {
 
     private func apply(_ s: [String: Any]) {
         waiting = (s["state"] as? String) == "waiting_for_guest"
-        let depth = (s["bit_depth"] as? Int) ?? 12
-        let scale = Double((1 << depth) - 1)
+        // vphoned hands the colours over already as 0...1 (bit_depth is the hardware's, not the JSON's).
+        let scale = 1.0
         guard let geo = s["geometry"] as? [String: Any], let xs = geo["x"] as? [Double], let ys = geo["y"] as? [Double],
               let rings = geo["rings"] as? [Int], let pixels = s["pixels"] as? [[Double]] else { return }
         var out: [(x: CGFloat, y: CGFloat, ring: Int, color: Color)] = []

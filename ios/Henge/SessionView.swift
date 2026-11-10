@@ -673,6 +673,12 @@ struct SessionView: View {
         henge_vm_set_display(UInt32(mac.screen.width), UInt32(mac.screen.height))
         if mac.isRetina {
             henge_vm_set_display_mm(UInt32(Device.retinaMM.width), UInt32(Device.retinaMM.height))
+        } else if mac.isResearch && mac.screen.width < 1280 {
+            // vphone's pixel densities: a HomePod's top 72 ppi, a watch 326, a phone 460. A density far off
+            // (the default is about 20 ppi) makes a HomePod's SoundBoard abort in QuartzCore's query_displays().
+            let w = mac.screen.width, h = mac.screen.height
+            let ppi = w == h ? 72.0 : w < 600 ? 326.0 : 460.0
+            henge_vm_set_display_mm(UInt32(Double(w) * 25.4 / ppi + 0.5), UInt32(Double(h) * 25.4 / ppi + 0.5))
         } else {
             henge_vm_set_display_mm(0, 0)
         }
