@@ -3,7 +3,7 @@ import SwiftUI
 /// A HomePod guest's top surface. It has no screen: its 19 LEDs (and the lit + and − marks) come from the
 /// guest agent's `homepod.display.state`, which vphone's SoundBoard hook fills, and are drawn here as glows.
 struct HomePodCap: View {
-    @State private var leds: [(x: CGFloat, y: CGFloat, ring: Int, color: Color)] = []
+    @State private var leds: [Float] = [] // x, y (down), r, g, b per LED, for vphone's cap shader
     @State private var plus = 0.0
     @State private var minus = 0.0
     @State private var waiting = true
@@ -13,29 +13,11 @@ struct HomePodCap: View {
         GeometryReader { geo in
             let side = min(geo.size.width, geo.size.height)
             let _ = updateSide(side)
-            ZStack {
-                Circle().fill(Color(white: 0.06))
-                ForEach(leds.indices, id: \.self) { i in
-                    let led = leds[i]
-                    let r = side * (led.ring == 0 ? 0.16 : led.ring == 1 ? 0.13 : 0.11)
-                    Circle() // one LED under the diffuser: a soft spot, added to its neighbours' light
-                        .fill(RadialGradient(colors: [led.color, led.color.opacity(0.5), .clear],
-                                             center: .center, startRadius: 0, endRadius: r))
-                        .frame(width: r * 2, height: r * 2)
-                        .position(x: led.x * side, y: (1 - led.y) * side)
-                        .blendMode(.plusLighter)
-                }
-                Image(systemName: "minus")
-                    .font(.system(size: side * 0.12, weight: .light))
-                    .foregroundStyle(.white.opacity(0.15 + 0.85 * minus))
-                    .position(x: side * 0.22, y: side * 0.5)
-                Image(systemName: "plus")
-                    .font(.system(size: side * 0.12, weight: .light))
-                    .foregroundStyle(.white.opacity(0.15 + 0.85 * plus))
-                    .position(x: side * 0.78, y: side * 0.5)
-            }
-            .frame(width: side, height: side)
-            .clipShape(Circle())
+            Rectangle()
+                .frame(width: side, height: side)
+                .colorEffect(ShaderLibrary.homePodCap(.float4(side / 2, side / 2, side / 2, 0), .floatArray(leds.isEmpty ? [0.5, 0.5, 0, 0, 0] : leds),
+                                                      .float(Float(plus)), .float(Float(minus))))
+                .clipShape(Circle())
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .contentShape(Rectangle())
@@ -124,10 +106,10 @@ struct HomePodCap: View {
                 }
             }
         }
-        var out: [(x: CGFloat, y: CGFloat, ring: Int, color: Color)] = []
+        var out: [Float] = []
         for i in 0..<min(xs.count, ys.count, rings.count, pixels.count) where pixels[i].count >= 3 {
             let p = pixels[i]
-            out.append((CGFloat(xs[i]), CGFloat(ys[i]), rings[i], Color(red: p[0] / scale, green: p[1] / scale, blue: p[2] / scale)))
+            out += [Float(xs[i]), Float(1 - ys[i]), Float(p[0] / scale), Float(p[1] / scale), Float(p[2] / scale)]
         }
         leds = out
         plus = min(1, ((s["plus"] as? Double) ?? 0) / scale)
