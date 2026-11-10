@@ -82,6 +82,9 @@ typedef struct HvVmapple {
     HvVpiop *vpiop;          /* vresearch101: the SEP mailbox */
     uint8_t *scratch;        /* vresearch101: avp-scratch RAM above the config window, to 0x700000 */
     int research;            /* vresearch101 (HV_MACHINE=vresearch101): board 0x90, the SEP mailbox, GXF */
+    void *ctrr, *sealed;
+    pthread_t prefault_thread;
+    int prefault_started;
     void (*poll)(void);      /* extra device work on the CPU thread each tick (Mac PVG) */
 } HvVmapple;
 
@@ -93,5 +96,7 @@ int hv_vmapple_create(HvVmapple *b, HvMachine *m, HvCpu *cpus, uint64_t ram_size
 int hv_vmapple_load_rom(HvVmapple *b, const char *path);
 /* CPU reset: EL1, MMU off, interrupts masked, at the start of the ROM. */
 void hv_vmapple_reset_cpu(HvVmapple *b);
+/* No CPU or host device callback may be using the board. */
+void hv_vmapple_destroy(HvVmapple *b);
 
 #endif

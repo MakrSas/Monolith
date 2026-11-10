@@ -21,7 +21,7 @@ struct TouchScreen: UIViewRepresentable {
         private func send(_ touch: UITouch, down: Bool) {
             guard let finger = fingers[ObjectIdentifier(touch)], bounds.width > 0, bounds.height > 0 else { return }
             let p = touch.location(in: self)
-            henge_vm_touch(Int32(finger), down ? 1 : 0, Double(p.x / bounds.width), Double(p.y / bounds.height))
+            henge_vm_screen_touch(Int32(finger), down ? 1 : 0, Double(p.x / bounds.width), Double(p.y / bounds.height))
         }
 
         override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
