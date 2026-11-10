@@ -11,6 +11,7 @@
 #include "net_slirp.h"
 #include "dns_proxy.h"
 #include "share.h"
+#include "mdns_proxy.h"
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -199,6 +200,10 @@ static const SlirpCb callbacks = {
 
 /* ---- the network thread ---- */
 
+static void mdns_to_guest(const uint8_t *frame, uint32_t len) {
+    if (push(&to_guest, frame, len)) hv_machine_wake(machine);
+}
+
 static void *net_thread(void *unused) {
     (void)unused;
     while (!atomic_load(&stopping)) {
@@ -225,6 +230,7 @@ static void *net_thread(void *unused) {
                 timers[i].expire_ms = -1;
                 slirp_handle_timer(slirp, timers[i].id, timers[i].cb_opaque);
             }
+        hv_mdns_proxy_tick(now, mdns_to_guest);
         /* What the guest sent since. */
         for (;;) {
             pthread_mutex_lock(&to_host.mu);
@@ -232,6 +238,7 @@ static void *net_thread(void *unused) {
             if (to_host.head != to_host.tail) f = to_host.f[to_host.head++ % QUEUE];
             pthread_mutex_unlock(&to_host.mu);
             if (!f.data) break;
+            hv_mdns_proxy_frame(slirp, f.data, f.len);
             slirp_input(slirp, f.data, (int)f.len);
             free(f.data);
         }
@@ -336,6 +343,7 @@ void hv_net_detach(void) {
         thread_started = 0;
     }
     if (net) net->transmit = NULL;
+    hv_mdns_proxy_stop();
     if (slirp) slirp_cleanup(slirp);
     slirp = NULL;
     if (queues_initialized) {

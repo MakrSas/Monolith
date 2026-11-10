@@ -97,6 +97,7 @@ void henge_vm_set_sep(const char *rom, const char *storage) {
     sep_rom = rom ? strdup(rom) : NULL;
     sep_storage = storage ? strdup(storage) : NULL;
     setenv("HV_MACHINE", "vresearch101", 1);
+    setenv("HV_NET_PUBLISH", "1", 0); /* a device guest's Bonjour services (a HomePod's AirPlay) on the phone's Wi-Fi */
 }
 
 int henge_vm_boot(const char *rom, const char *disk, const char *aux, uint64_t ecid, uint64_t seed, uint64_t ram_mb,
