@@ -328,6 +328,8 @@ int hv_vmapple_create(HvVmapple *b, HvMachine *m, HvCpu *cpu, uint64_t ram_size,
         /* What vphone-linux gives these guests: a keyboard, and a touch screen behind a hub. No virtio input or sound. */
         b->usbx = hv_usbx_create(m, b->pcie);
         b->vsock = hv_virtio_vsock_create(m, b->pcie);
+        /* A HomePod (or any guest that plays sound) takes virtio-sound as vphone gives it; last, so the USB slot stays put. */
+        if (!getenv("HV_NO_SOUND")) b->snd = hv_virtio_snd_create(m, b->pcie);
     } else {
     b->usb = hv_xhci_create(m, b->pcie);
     /* HV_INPUT_ORDER (experiment): "keyboard" = keyboard only, "swap" = mouse first. */
