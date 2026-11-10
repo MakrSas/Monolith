@@ -331,10 +331,15 @@ struct SessionView: View {
 
     /// A watch or phone guest: its screen takes touches itself, and its buttons go here.
     private func buttonsPanel(_ layout: Layout) -> some View {
-        HStack(spacing: 0) {
-            DigitalCrown().padding(.vertical, 10).padding(.horizontal, 14)
-            Rectangle().fill(Desk.hairline).frame(width: 0.5)
-            DeviceButton(symbol: "button.vertical.right.press", label: "Side", button: 1)
+        let phone = mac.screen.width >= 700 // an iPhone guest: Home instead of the crown and side button
+        return HStack(spacing: 0) {
+            if phone {
+                DeviceButton(symbol: "house", label: "Home", button: 0)
+            } else {
+                DigitalCrown().padding(.vertical, 10).padding(.horizontal, 14)
+                Rectangle().fill(Desk.hairline).frame(width: 0.5)
+                DeviceButton(symbol: "button.vertical.right.press", label: "Side", button: 1)
+            }
             Rectangle().fill(Desk.hairline).frame(width: 0.5)
             DeviceButton(symbol: "power", label: "Power", button: 4)
             Rectangle().fill(Desk.hairline).frame(width: 0.5)
