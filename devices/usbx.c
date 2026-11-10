@@ -226,6 +226,7 @@ static int str_desc(const char *s, uint8_t *t) {
 static void touch_report_now(HvUsbx *x, uint8_t *b) {
     memset(b, 0, TOUCH_LEN);
     for (int i = 0; i < 4; i++) {
+        if (!x->finger[i].down && !x->finger[i].x && !x->finger[i].y) continue; /* a slot never touched stays all zero */
         b[i * 5] = (uint8_t)(i | (x->finger[i].down ? 0xc0 : 0));
         memcpy(b + i * 5 + 1, &x->finger[i].x, 2);
         memcpy(b + i * 5 + 3, &x->finger[i].y, 2);
@@ -364,7 +365,11 @@ static void run_in(HvUsbx *x, int d) {
         if (((trb[3] >> 10) & 0x3f) != TRB_NORMAL) continue;
         uint64_t buf = (uint64_t)trb[1] << 32 | trb[0];
         uint32_t want = trb[2] & 0x1ffff, n = want < (uint32_t)dv->rlen ? want : (uint32_t)dv->rlen;
-        if (xlog()) fprintf(stderr, "usbx: dev %d report %u bytes delivered\n", d, n);
+        if (xlog()) {
+            fprintf(stderr, "usbx: dev %d report %u bytes delivered:", d, n);
+            for (uint32_t k = 0; k < n; k++) fprintf(stderr, " %02x", dv->q[dv->qh % QLEN][k]);
+            fprintf(stderr, "\n");
+        }
         wr(x, buf, dv->q[dv->qh++ % QLEN], n);
         x->delivered++;
         xfer_event(x, at, n < want ? CC_SHORT_PACKET : CC_SUCCESS, want - n, dv->slot, DCI_IN);
@@ -512,7 +517,9 @@ static void run_commands(HvUsbx *x) {
 
 /* ---- ports and registers ---- */
 
-static uint32_t connected(void) { return PORT_PP | PORT_CCS | PORT_CSC | (uint32_t)SPEED_FULL << PORT_SPEED_SHIFT | 7u << PORT_PLS_SHIFT; }
+/* Bit 30, Device Removable: set means built in. IOKit makes a non-removable port's HID device Built-In, and only a
+   built-in digitizer drives the guest's screen. */
+static uint32_t connected(void) { return PORT_PP | PORT_CCS | PORT_CSC | (uint32_t)SPEED_FULL << PORT_SPEED_SHIFT | 7u << PORT_PLS_SHIFT | 1u << 30; }
 
 static void port_write(HvUsbx *x, int p, uint32_t v) {
     uint32_t s = x->portsc[p];
