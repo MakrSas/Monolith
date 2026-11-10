@@ -73,6 +73,8 @@ void hv_vm_key(uint16_t code, int down);
 void hv_vm_touch(int finger, int down, double x, double y);
 void hv_vm_button(int which, int down);
 void hv_vm_crown(int detents);
+/* vresearch101: 127.0.0.1:host_port reaches the guest's vsock guest_port (vphoned's HTTP API is 1339). 0 or -1. */
+int hv_vm_vsock_forward(int host_port, unsigned guest_port);
 void hv_vm_key_hid(uint8_t usage, int down); /* HID keyboard usage, which is what iOS reports for a hardware keyboard */
 void hv_vm_mouse_move(int dx, int dy);
 void hv_vm_mouse_button(int button, int down); /* 0 left, 1 right, 2 middle */

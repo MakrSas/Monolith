@@ -60,7 +60,9 @@ void henge_vm_key_hid(uint8_t usage, int down);
 void henge_vm_touch(int finger, int down, double x, double y);
 void henge_vm_button(int which, int down);
 /* The Digital Crown turned by detents (positive: up). */
-void henge_vm_crown(int detents); /* a hardware keyboard: iOS gives each key's HID usage */
+void henge_vm_crown(int detents);
+/* Watch/TV guests: 127.0.0.1:host_port reaches the guest agent (vphoned) on vsock port 1339. 0, or -1 (no vsock, port busy). */
+int henge_vm_agent_forward(int host_port); /* a hardware keyboard: iOS gives each key's HID usage */
 void henge_vm_mouse_move(int dx, int dy);
 void henge_vm_mouse_button(int button, int down);
 /* Wheel units: dy > 0 up, dx > 0 right. */

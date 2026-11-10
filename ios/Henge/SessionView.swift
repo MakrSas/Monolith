@@ -1,5 +1,6 @@
 import SwiftUI
 import GameController
+import UniformTypeIdentifiers
 
 /// A running Mac. Upright, its screen sits above a trackpad; on its side the screen fills the device
 /// and is its own trackpad. Zoomed in, the screen fills the device either way and follows the pointer.
@@ -38,6 +39,8 @@ struct SessionView: View {
     @AppStorage("henge.tips.stillWallpaperShown") private var stillWallpaperTipShown = false
     @State private var showWallpaperTip = false
     @State private var confirmStop = false
+    @State private var pickingApp = false
+    @State private var appStatus: String?
     @State private var zoomCentre = CGPoint(x: 0.5, y: 0.5) // where the zoomed view is, 0...1 of the Mac's screen
     @State private var map: UIImage?
     @State private var zoomFollowing: Task<Void, Never>?
@@ -127,6 +130,18 @@ struct SessionView: View {
                         .allowsHitTesting(false)
                 }
                 if let error { errorCard(error, layout) }
+                if let appStatus {
+                    Label(appStatus, systemImage: "app.badge")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: min(full.width - 40, 520))
+                        .padding(.horizontal, 18).padding(.vertical, 12)
+                        .deskGlass(in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .position(x: full.width / 2, y: insets.top + 56)
+                        .transition(.opacity)
+                        .onTapGesture { self.appStatus = nil }
+                }
                 KeyboardCatcher(active: $typing).frame(width: 0, height: 0)
             }
             .frame(width: full.width, height: full.height)
@@ -153,6 +168,10 @@ struct SessionView: View {
         .persistentSystemOverlays(.hidden)
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showDetails) { details }
+        .fileImporter(isPresented: $pickingApp, allowedContentTypes: [UTType(filenameExtension: "ipa") ?? .data, .data]) { result in
+            guard case .success(let url) = result else { return }
+            installApp(url)
+        }
         .confirmationDialog("Shut down \(mac.name)?", isPresented: $confirmStop, titleVisibility: .visible) {
             Button("Shut Down", role: .destructive) { finish() }
         } message: {
@@ -280,6 +299,10 @@ struct SessionView: View {
                 Spacer()
                 tool("info.circle", "Details") { showDetails = true }
                 Spacer()
+                if mac.isResearch {
+                    tool("square.and.arrow.down", "Install app") { pickingApp = true }
+                    Spacer()
+                }
                 tool("power", "Shut down", tint: Desk.bad) { stopTapped() }
             }
             .padding(.horizontal, 22)
@@ -402,6 +425,7 @@ struct SessionView: View {
             pasteTool
             tool(zoomed ? "minus.magnifyingglass" : "plus.magnifyingglass", zoomed ? "Zoom out" : "Zoom in", tint: zoomed ? Desk.accentLight : .white) { zoomed.toggle() }
             tool("info.circle", "Details", tint: .white) { showDetails = true }
+            if mac.isResearch { tool("square.and.arrow.down", "Install app", tint: .white) { pickingApp = true } }
             Rectangle().fill(Color.white.opacity(0.3)).frame(width: 1, height: 22).padding(.horizontal, 4)
             tool("power", "Shut down", tint: Desk.bad) { stopTapped() }
         }
@@ -646,6 +670,27 @@ struct SessionView: View {
             if tick % 30 == 0 { HengeLog.logFootprint("session") } // how close to the limit, for a memory kill leaves no crash report
             if tick % 60 == 0 { MacPreview.save(for: mac) }
             try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+    }
+
+    /// An .ipa from Files onto the watch or TV, through the guest's own agent.
+    private func installApp(_ url: URL) {
+        Task {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            // A copy this app can read after the picker closes.
+            let local = FileManager.default.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
+            try? FileManager.default.removeItem(at: local)
+            do {
+                try FileManager.default.copyItem(at: url, to: local)
+                defer { try? FileManager.default.removeItem(at: local) }
+                try await GuestAgent.install(ipa: local) { step in Task { @MainActor in appStatus = step } }
+                appStatus = "\(url.deletingPathExtension().lastPathComponent) is installed."
+            } catch {
+                appStatus = "Could not install \(url.lastPathComponent): \(error.localizedDescription)"
+            }
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            appStatus = nil
         }
     }
 

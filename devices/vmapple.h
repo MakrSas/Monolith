@@ -16,6 +16,7 @@
 #include "virtio_usb.h"
 #include "xhci.h"
 #include "virtio_net.h"
+#include "virtio_vsock.h"
 #include "virtio_snd.h"
 #include "virtio_balloon.h"
 #include "vpiop.h"
@@ -67,6 +68,7 @@ typedef struct HvVmapple {
     struct HvPvgLite *pvg;   /* our own graphics device (the Mac replaces it with the framework) */
     HvVirtioBlk *aux_blk, *root_blk;
     HvVirtioNet *net;
+    HvVsock *vsock; /* vresearch101: the channel vphone's guest agent talks over */
     HvVirtioSnd *snd;
     HvVirtioBalloon *balloon; /* HV_BALLOON=MB (the first target; 0 = none yet) adds it; off by default until tried on a phone */
     HvVirtioInput *keyboard, *mouse;

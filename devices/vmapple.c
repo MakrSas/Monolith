@@ -326,6 +326,7 @@ int hv_vmapple_create(HvVmapple *b, HvMachine *m, HvCpu *cpu, uint64_t ram_size,
     if (b->research) {
         /* What vphone-linux gives these guests: a keyboard, and a touch screen behind a hub. No virtio input or sound. */
         b->usbx = hv_usbx_create(m, b->pcie);
+        b->vsock = hv_virtio_vsock_create(m, b->pcie);
     } else {
     b->usb = hv_xhci_create(m, b->pcie);
     /* HV_INPUT_ORDER (experiment): "keyboard" = keyboard only, "swap" = mouse first. */

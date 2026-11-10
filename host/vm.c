@@ -111,6 +111,7 @@ const char *hv_vm_reason_name(int r) {
 static void board_poll(void) {
     if (extra_poll) extra_poll();
     if (net_on) hv_net_poll();
+    hv_vsock_poll(board.vsock);
 }
 
 static int fail(char *err, size_t n, const char *msg) {
@@ -413,6 +414,7 @@ void hv_vm_button(int which, int down) {
 }
 
 void hv_vm_crown(int detents) { hv_usbx_wheel(board.usbx, detents); }
+int hv_vm_vsock_forward(int host_port, unsigned guest_port) { return board.vsock ? hv_vsock_forward(board.vsock, host_port, guest_port) : -1; }
 
 void hv_vm_key_hid(uint8_t usage, int down) {
     if (board.usbx) {
