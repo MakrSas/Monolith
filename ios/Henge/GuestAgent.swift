@@ -28,6 +28,18 @@ enum GuestAgent {
         return json
     }
 
+    /// One RPC (POST /v1/rpc); nil on any failure.
+    static func rpc(_ method: String, _ params: [String: Any] = [:], timeout: TimeInterval = 5) async -> [String: Any]? {
+        var request = URLRequest(url: base.appendingPathComponent("v1/rpc"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = timeout
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["method": method, "params": params])
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let json = try? check(data, response) else { return nil }
+        return json["result"] as? [String: Any]
+    }
+
     /// Is the agent up (the guest has booted far enough)?
     static func ready() async -> Bool {
         var request = URLRequest(url: base.appendingPathComponent("v1/apps/foreground"))
