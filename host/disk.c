@@ -6,6 +6,7 @@
 #include "disk.h"
 
 #include <fcntl.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -16,6 +17,14 @@ int hv_disk_open(HvDisk *d, const char *path, uint64_t offset, int readonly) {
     d->wfd = -1;
     d->fd = open(path, readonly ? O_RDONLY : O_RDWR);
     if (d->fd < 0) return -1;
+    /* One writer per image: a second emulator (or vphone, which takes the same lock) on a disk in use
+       interleaves two file systems' writes and wrecks it. */
+    if (!readonly && flock(d->fd, LOCK_EX | LOCK_NB) != 0) {
+        fprintf(stderr, "hengevm: %s is in use by another virtual machine\n", path);
+        close(d->fd);
+        d->fd = -1;
+        return -1;
+    }
     struct stat st;
     if (fstat(d->fd, &st) != 0 || (uint64_t)st.st_size < offset) {
         close(d->fd);
