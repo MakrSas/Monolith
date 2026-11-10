@@ -1,3 +1,5 @@
+#include <string.h>
+#include <stdio.h>
 #include <fcntl.h>
 #include <errno.h>
 #include "../core/machine.h"
@@ -44,13 +46,19 @@ void hv_disk_close(HvDisk *d) {
 }
 
 int hv_disk_read(HvDisk *d, uint64_t off, void *buf, uint64_t len) {
-    if (off > d->size || len > d->size - off) return -1;
+    if (off > d->size || len > d->size - off) {
+        fprintf(stderr, "hengevm: disk read past the end: %llu+%llu of %llu\n", (unsigned long long)off, (unsigned long long)len, (unsigned long long)d->size);
+        return -1;
+    }
     uint8_t *p = buf;
     while (len) {
         size_t count = len > DISK_IO_CHUNK ? DISK_IO_CHUNK : (size_t)len;
         ssize_t n = pread(d->fd, p, count, (off_t)(d->offset + off));
         if (n < 0 && errno == EINTR) continue;
-        if (n <= 0) return -1;
+        if (n <= 0) {
+            fprintf(stderr, "hengevm: disk read failed at %llu (%zu bytes): %s\n", (unsigned long long)off, count, n ? strerror(errno) : "end of file");
+            return -1;
+        }
         p += n;
         off += (uint64_t)n;
         len -= (uint64_t)n;
