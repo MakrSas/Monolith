@@ -16,5 +16,7 @@ HvVsock *hv_virtio_vsock_create(HvMachine *m, HvPcie *bus);
 int hv_vsock_forward(HvVsock *s, int host_port, uint32_t guest_port);
 /* Host-side work: on CPU 0's thread each tick (the board's poll). */
 void hv_vsock_poll(HvVsock *s);
+/* The machine is going: its TCP forwards close (so the next machine can listen on the same ports). */
+void hv_vsock_destroy(HvVsock *s);
 
 #endif

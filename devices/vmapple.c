@@ -388,6 +388,8 @@ void hv_vmapple_destroy(HvVmapple *b) {
         pthread_cond_destroy(&b->vusb->cv);
         free(b->vusb);
     }
+    hv_vsock_destroy(b->vsock);
+    b->vsock = NULL;
     if (b->snd) { free(b->snd->ring); free(b->snd); }
     free(b->balloon);
     if (b->keyboard) { pthread_mutex_destroy(&b->keyboard->mu); free(b->keyboard); }

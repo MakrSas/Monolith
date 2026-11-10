@@ -64,6 +64,8 @@ struct HvVsock {
     uint32_t next_port;
     uint32_t scan_next, scan_end;
     int log;
+    volatile int stop;
+    pthread_t thread;
     time_t scan_at; /* the scan starts this long after boot, once the guest's services listen */
 };
 
@@ -237,7 +239,7 @@ void hv_vsock_poll(HvVsock *s) {
 static void *tcp_thread(void *arg) {
     HvVsock *s = arg;
     static uint8_t buf[CHUNK];
-    for (;;) {
+    while (!s->stop) {
         struct pollfd pf[1 + MAXFWD + MAXCONN];
         Conn *who[1 + MAXFWD + MAXCONN];
         int n = 0;
@@ -328,8 +330,7 @@ HvVsock *hv_virtio_vsock_create(HvMachine *m, HvPcie *bus) {
     s->next_port = 49152;
     s->log = getenv("HV_VSOCK_LOG") != NULL;
     hv_pcie_attach(bus, &v->pci);
-    pthread_t t;
-    pthread_create(&t, NULL, tcp_thread, s);
+    pthread_create(&s->thread, NULL, tcp_thread, s);
     const char *fwd = getenv("HV_VSOCK_FWD");
     while (fwd && *fwd) {
         int hp;
@@ -342,4 +343,18 @@ HvVsock *hv_virtio_vsock_create(HvMachine *m, HvPcie *bus) {
     unsigned a, b;
     if (scan && sscanf(scan, "%u-%u", &a, &b) == 2 && a && b >= a) s->scan_next = a, s->scan_end = b, s->scan_at = time(NULL) + (getenv("HV_VSOCK_SCAN_DELAY") ? atoi(getenv("HV_VSOCK_SCAN_DELAY")) : 240);
     return s;
+}
+
+void hv_vsock_destroy(HvVsock *s) {
+    if (!s) return;
+    s->stop = 1;
+    wake_thread(s);
+    pthread_join(s->thread, NULL);
+    for (int i = 0; i < s->nfwd; i++) close(s->lfd[i]);
+    for (int i = 0; i < MAXCONN; i++)
+        if (s->c[i].fd >= 0 && s->c[i].state != C_FREE) close(s->c[i].fd);
+    while (s->head) { Pkt *p = s->head; s->head = p->next; free(p); }
+    close(s->wake[0]), close(s->wake[1]);
+    pthread_mutex_destroy(&s->mu);
+    free(s);
 }
