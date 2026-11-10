@@ -14,6 +14,8 @@
 #include "mdns_proxy.h"
 
 #include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <pthread.h>
@@ -292,6 +294,30 @@ void hv_net_poll(void) {
     }
 }
 
+struct in_addr hv_net_guest, hv_net_gateway;
+
+/* With the guest's services published (mdns_proxy.c) it gets the host's own LAN address, in a two-address
+   network with one neighbour standing in as its gateway: AirPlay tells the sender its addresses inside its
+   encrypted setup (the clock's peers), and 10.0.2.15 would send the sender's clock nowhere. Everything else
+   on the LAN stays outside the guest's network, so it is reached through the NAT as before. */
+static int host_lan_address(struct in_addr *out) {
+    struct ifaddrs *list, *i;
+    int found = 0;
+    if (getifaddrs(&list)) return 0;
+    for (int pass = 0; pass < 2 && !found; pass++)
+        for (i = list; i && !found; i = i->ifa_next) {
+            if (!i->ifa_addr || i->ifa_addr->sa_family != AF_INET || !(i->ifa_flags & IFF_UP) || (i->ifa_flags & IFF_LOOPBACK)) continue;
+            if (pass == 0 && strcmp(i->ifa_name, "en0")) continue; /* Wi-Fi first */
+            uint32_t a = ntohl(((struct sockaddr_in *)i->ifa_addr)->sin_addr.s_addr);
+            if ((a >> 24) == 10 || (a >> 16) == 0xc0a8 || (a >> 20) == 0xac1) { /* private: the LAN, not a tunnel's */
+                out->s_addr = htonl(a);
+                found = 1;
+            }
+        }
+    freeifaddrs(list);
+    return found;
+}
+
 int hv_net_attach(HvMachine *m, HvVirtioNet *n) {
     if (machine) return -1;
     machine = m;
@@ -312,6 +338,17 @@ int hv_net_attach(HvMachine *m, HvVirtioNet *n) {
     inet_pton(AF_INET, "255.255.255.0", &cfg.vnetmask);
     inet_pton(AF_INET, "10.0.2.2", &cfg.vhost);
     inet_pton(AF_INET, "10.0.2.15", &cfg.vdhcp_start);
+    struct in_addr lan;
+    if (hv_mdns_proxy_enabled() && host_lan_address(&lan)) {
+        uint32_t a = ntohl(lan.s_addr);
+        cfg.vnetwork.s_addr = htonl(a & ~1u);
+        inet_pton(AF_INET, "255.255.255.254", &cfg.vnetmask);
+        cfg.vhost.s_addr = htonl(a ^ 1u);
+        cfg.vdhcp_start = lan;
+        fprintf(stderr, "hengevm: net: the guest takes this host's address %s\n", inet_ntoa(lan));
+    }
+    hv_net_guest = cfg.vdhcp_start;
+    hv_net_gateway = cfg.vhost;
     inet_pton(AF_INET, "10.0.2.3", &cfg.vnameserver);
     cfg.vhostname = "hengevm";
     cfg.if_mtu = 1500;
@@ -323,7 +360,7 @@ int hv_net_attach(HvMachine *m, HvVirtioNet *n) {
         struct in_addr h, g;
         if (sscanf(getenv("HV_NET_FWD"), "%d:%d", &hp, &gp) == 2) {
             inet_pton(AF_INET, "127.0.0.1", &h);
-            inet_pton(AF_INET, "10.0.2.15", &g);
+            g = hv_net_guest;
             if (slirp_add_hostfwd(slirp, 0, h, hp, g, gp) != 0) fprintf(stderr, "hengevm: no forward for port %d\n", hp);
         }
     }

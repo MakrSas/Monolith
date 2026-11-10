@@ -8,6 +8,7 @@
 
    Runs on the network thread, like libslirp: frames are handed over from transmit() (CPU thread). */
 #include "mdns_proxy.h"
+#include "net_slirp.h"
 
 #include <arpa/inet.h>
 #include <dns_sd.h>
@@ -126,7 +127,7 @@ static void forward_range(void) {
     }
     struct in_addr any, guest;
     inet_pton(AF_INET, "0.0.0.0", &any);
-    inet_pton(AF_INET, "10.0.2.15", &guest);
+    guest = hv_net_guest;
     int tcp = 0, udp = 0;
     for (int p = first; p <= last; p++) {
         int taken = 0;
@@ -149,7 +150,7 @@ static void publish(Service *s) {
     if (!strcmp(s->type, "_remotepairing._tcp")) return; /* a fresh identity each time it asks, and not for this */
     struct in_addr any, guest;
     inet_pton(AF_INET, "0.0.0.0", &any);
-    inet_pton(AF_INET, "10.0.2.15", &guest);
+    guest = hv_net_guest;
     for (int i = 0; i < MAX_SERVICES && !s->host_port; i++) /* one forward per guest port */
         if (services[i].used && &services[i] != s && services[i].host_port && services[i].guest_port == s->guest_port &&
             services[i].udp == s->udp)
@@ -286,7 +287,7 @@ void hv_mdns_proxy_tick(int64_t now_ms, void (*send)(const uint8_t *frame, uint3
     dns[5] = (uint8_t)q;
     int ulen = 8 + n, tot = 20 + ulen;
     ip[0] = 0x45; ip[2] = (uint8_t)(tot >> 8); ip[3] = (uint8_t)tot; ip[8] = 255; ip[9] = 17;
-    ip[12] = 10; ip[13] = 0; ip[14] = 2; ip[15] = 2;
+    memcpy(ip + 12, &hv_net_gateway, 4);
     ip[16] = 224; ip[17] = 0; ip[18] = 0; ip[19] = 251;
     uint32_t sum = 0;
     for (int i = 0; i < 20; i += 2) sum += (uint32_t)(ip[i] << 8 | ip[i + 1]);
