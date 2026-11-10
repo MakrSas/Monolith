@@ -191,6 +191,8 @@ static uint64_t psci(HvCpu *cpu, uint64_t fn) {
         t->mpidr = mpidr;
         t->pc = entry;
         t->x[0] = context;
+        /* A GXF guest's secondary starts in SPTM, which uses SIMD before it sets CPACR_EL1: start it with FP/SIMD on. */
+        if (t->gxf.on) t->cpacr_el1 |= 3ull << 20;
         t->parked_off = 1;
         __atomic_store_n(&t->off, 0, __ATOMIC_RELEASE);
         pcs->wake_pending = 1;

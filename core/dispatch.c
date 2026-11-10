@@ -926,6 +926,26 @@ static int run_loop(HvCpu *cpu, int one) {
             continue;
         }
         hv_cpu_process_requests(cpu);
+        {
+            static int trace = -1;
+            static uint64_t n[8];
+            if (trace < 0) trace = getenv("HV_SMP_TRACE") != NULL;
+            if (trace && cpu->index > 0 && cpu->index < 8 && (n[cpu->index]++ & 0x3ffff) == 0) {
+                uint32_t code[72] = {0};
+                hv_phys_read(m, cpu->pc - 0x100, code, sizeof code);
+                fprintf(stderr, "smp: cpu %d pc %llx el %u off %d gxf %u/%u sctlr %llx x0 %llx x1 %llx x2 %llx x3 %llx code", cpu->index,
+                        (unsigned long long)cpu->pc, cpu->el, cpu->off, cpu->gxf.status[0], cpu->gxf.status[1], (unsigned long long)cpu->sctlr_el1,
+                        (unsigned long long)cpu->x[0], (unsigned long long)cpu->x[1], (unsigned long long)cpu->x[2], (unsigned long long)cpu->x[3]);
+                for (int k = 0; k < 72; k++) fprintf(stderr, " %08x", code[k]);
+                fprintf(stderr, "\nsmp: x4-x12");
+                for (int k = 4; k < 13; k++) fprintf(stderr, " %llx", (unsigned long long)cpu->x[k]);
+                fprintf(stderr, " lr %llx esr %llx elr %llx far %llx | gl esr %llx elr %llx far %llx spsr %llx vbar %llx", (unsigned long long)cpu->x[30],
+                        (unsigned long long)cpu->esr_el1, (unsigned long long)cpu->elr_el1, (unsigned long long)cpu->far_el1,
+                        (unsigned long long)cpu->gxf.esr_gl, (unsigned long long)cpu->gxf.elr_gl, (unsigned long long)cpu->gxf.far_gl,
+                        (unsigned long long)cpu->gxf.spsr_gl, (unsigned long long)cpu->gxf.vbar_gl);
+                fprintf(stderr, "\n");
+            }
+        }
         if (cpu->halted) return HV_EXIT_HALT;
         if (cpu->off) {
             wait_while_off(cpu); /* comes back after CPU_ON, reset to its entry point */
