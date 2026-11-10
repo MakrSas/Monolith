@@ -25,6 +25,11 @@ struct HomePodCap: View {
                         .position(x: led.x * side, y: (1 - led.y) * side)
                         .blendMode(.screen)
                 }
+                if let b = pressed { // the finger, until the guest's own light answers
+                    Circle().fill(.white.opacity(holding ? 0.35 : 0.2))
+                        .frame(width: side * 0.3, height: side * 0.3).blur(radius: side * 0.05)
+                        .position(x: side * (b == 1 ? 0.22 : b == 2 ? 0.78 : 0.5), y: side * 0.5)
+                }
                 Image(systemName: "minus")
                     .font(.system(size: side * 0.12, weight: .light))
                     .foregroundStyle(.white.opacity(0.15 + 0.85 * minus))
@@ -68,6 +73,7 @@ struct HomePodCap: View {
     @State private var touchStart: Date?
     @State private var touchButton = 3
     @State private var holding = false
+    @State private var pressed: Int?
     @State private var side: CGFloat = 1
 
     private func touch(at p: CGPoint, in v: DragGesture.Value, began: Bool) {
@@ -75,6 +81,7 @@ struct HomePodCap: View {
             touchStart = Date()
             let x = p.x / max(side, 1)
             touchButton = x < 0.33 ? 1 : x > 0.67 ? 2 : 3
+            pressed = touchButton
             send(1, touchButton, coalesced: false)
             let started = touchStart
             Task {
@@ -85,13 +92,17 @@ struct HomePodCap: View {
             if holding { send(4, touchButton, coalesced: false) } else { send(2, touchButton, coalesced: true) }
             touchStart = nil
             holding = false
+            pressed = nil
         }
     }
 
     private func send(_ action: Int, _ button: Int, coalesced: Bool) {
         let event: [String: Any] = ["action": action, "button": button, "coalesced": coalesced, "deviceSideways": false,
                                     "numberOfTaps": 1, "startMachTime": 0]
-        Task { _ = await GuestAgent.rpc("homepod.debug.call", ["operation": "sendButtonCommand:", "arguments": ["event": event]], timeout: 5) }
+        Task {
+            let r = await GuestAgent.rpc("homepod.debug.call", ["operation": "sendButtonCommand:", "arguments": ["event": event]], timeout: 8)
+            HengeLog.log("homepod", "button \(button) action \(action): \(r.map { "\($0)" } ?? "no answer")")
+        }
     }
 
     /// The log gets each change of what the agent says (not every poll).
