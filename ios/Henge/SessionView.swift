@@ -354,27 +354,27 @@ struct SessionView: View {
             .position(x: layout.pad.midX, y: layout.pad.minY + min(layout.pad.height, 240) / 2)
     }
 
-    /// A watch or phone guest: its screen takes touches itself, and its buttons go here.
+    /// A watch or phone guest: its screen takes touches itself, and its own buttons go here; each device gets only
+    /// what the real one has (a HomePod has none: its + and − are on the top surface).
     private func buttonsPanel(_ layout: Layout) -> some View {
-        let phone = mac.screen.height * 10 > mac.screen.width * 16 // an iPhone guest (tall), not a watch (near square): Home instead of the crown and side button
-        let homePod = mac.screen.width == mac.screen.height && mac.screen.width <= 400 // no crown or side button, only power and volume
+        let phone = mac.screen.height * 10 > mac.screen.width * 16 // an iPhone guest (tall)
+        let homePod = mac.screen.width == mac.screen.height && mac.screen.width <= 400
         return HStack(spacing: 0) {
-            if homePod {
-                EmptyView()
-            } else if phone {
+            if phone {
                 DeviceButton(symbol: "house", label: "Home", button: 0)
-            } else {
+                Rectangle().fill(Desk.hairline).frame(width: 0.5)
+                DeviceButton(symbol: "power", label: "Side", button: 4)
+                Rectangle().fill(Desk.hairline).frame(width: 0.5)
+                DeviceButton(symbol: "speaker.plus", label: "Volume +", button: 2)
+                Rectangle().fill(Desk.hairline).frame(width: 0.5)
+                DeviceButton(symbol: "speaker.minus", label: "Volume −", button: 3)
+            } else if !homePod { // a watch: the crown and the side button
                 DigitalCrown().padding(.vertical, 10).padding(.horizontal, 14)
                 Rectangle().fill(Desk.hairline).frame(width: 0.5)
                 DeviceButton(symbol: "button.vertical.right.press", label: "Side", button: 1)
             }
-            if !homePod { Rectangle().fill(Desk.hairline).frame(width: 0.5) }
-            DeviceButton(symbol: "power", label: "Power", button: 4)
-            Rectangle().fill(Desk.hairline).frame(width: 0.5)
-            DeviceButton(symbol: "speaker.plus", label: "Volume +", button: 2)
-            Rectangle().fill(Desk.hairline).frame(width: 0.5)
-            DeviceButton(symbol: "speaker.minus", label: "Volume −", button: 3)
         }
+        .opacity(homePod ? 0 : 1)
         .background(Desk.card)
         .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(Desk.hairline, lineWidth: 0.5))
