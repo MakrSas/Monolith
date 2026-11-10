@@ -7,6 +7,7 @@ struct HomePodCap: View {
     @State private var plus = 0.0
     @State private var minus = 0.0
     @State private var waiting = true
+    @State private var lastLogged = ""
 
     var body: some View {
         GeometryReader { geo in
@@ -43,9 +44,22 @@ struct HomePodCap: View {
     private func poll() async {
         GuestAgent.connect()
         while !Task.isCancelled {
-            if let s = await GuestAgent.rpc("homepod.display.state", timeout: 2) { apply(s) }
+            if let s = await GuestAgent.rpc("homepod.display.state", timeout: 2) {
+                apply(s)
+                note("state \(s["state"] as? String ?? "?"), frames \(s["frames_received"] as? Int ?? -1)")
+            } else {
+                note("no answer from the guest agent")
+            }
             try? await Task.sleep(nanoseconds: waiting ? 1_000_000_000 : 50_000_000)
         }
+    }
+
+    /// The log gets each change of what the agent says (not every poll).
+    private func note(_ line: String) {
+        let key = line.replacingOccurrences(of: #"frames \d+"#, with: "frames", options: .regularExpression)
+        guard key != lastLogged else { return }
+        lastLogged = key
+        HengeLog.log("homepod", line)
     }
 
     private func apply(_ s: [String: Any]) {
