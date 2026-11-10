@@ -52,7 +52,26 @@ struct MacSettingsView: View {
                 .padding(.vertical, 10)
                 .deskCard()
 
-                if Device.fittingScreen.height != 1080 {
+                if mac.isResearch && mac.screen.height > mac.screen.width && mac.screen.width >= 580 {
+                    // An iPhone guest: its own resolution, or half of it each way (a quarter of the pixels to draw).
+                    DeskHeading("Screen")
+                    VStack(alignment: .leading, spacing: 12) {
+                        Picker("Screen", selection: Binding(get: { mac.screen.width >= 1000 ? "full" : "half" }, set: { choice in
+                            let full = mac.screen.width >= 1000
+                            if choice == "half" && full { (mac.screenWidth, mac.screenHeight) = ((mac.screen.width + 1) / 2, (mac.screen.height + 1) / 2) }
+                            if choice == "full" && !full { (mac.screenWidth, mac.screenHeight) = (mac.screen.width * 2, mac.screen.height * 2) }
+                            save()
+                        })) {
+                            Text("Full").tag("full")
+                            Text("Half (faster)").tag("half")
+                        }
+                        .pickerStyle(.segmented)
+                        Text("\(mac.screen.width) × \(mac.screen.height). Half draws a quarter of the pixels. Changes apply the next time this device starts.")
+                            .font(.system(size: 13)).foregroundStyle(Desk.dim)
+                    }
+                    .padding(17)
+                    .deskCard()
+                } else if Device.fittingScreen.height != 1080 {
                     DeskHeading("Screen")
                     VStack(alignment: .leading, spacing: 12) {
                         Picker("Screen", selection: Binding(get: {
