@@ -113,7 +113,17 @@ struct HomePodCap: View {
         // vphoned hands the colours over already as 0...1 (bit_depth is the hardware's, not the JSON's).
         let scale = 1.0
         guard let geo = s["geometry"] as? [String: Any], let xs = geo["x"] as? [Double], let ys = geo["y"] as? [Double],
-              let rings = geo["rings"] as? [Int], let pixels = s["pixels"] as? [[Double]] else { return }
+              let rings = geo["rings"] as? [Int], var pixels = s["pixels"] as? [[Double]] else { return }
+        // SoundBoard drives two layers over the same 19 LEDs (Siri, and the always-on one that carries setup's
+        // white pulse and the idle glow); the top surface shows both, added.
+        if let displays = s["displays"] as? [[String: Any]] {
+            for d in displays.dropFirst() {
+                guard let px = d["pixels"] as? [[Double]] else { continue }
+                for i in 0..<min(px.count, pixels.count) where px[i].count >= 3 && pixels[i].count >= 3 {
+                    for c in 0..<3 { pixels[i][c] = min(1, pixels[i][c] + px[i][c]) }
+                }
+            }
+        }
         var out: [(x: CGFloat, y: CGFloat, ring: Int, color: Color)] = []
         for i in 0..<min(xs.count, ys.count, rings.count, pixels.count) where pixels[i].count >= 3 {
             let p = pixels[i]
