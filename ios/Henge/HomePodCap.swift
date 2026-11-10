@@ -4,6 +4,7 @@ import SwiftUI
 /// guest agent's `homepod.display.state`, which vphone's SoundBoard hook fills, and are drawn here as glows.
 struct HomePodCap: View {
     @State private var leds: [Float] = [] // x, y (down), r, g, b per LED, for vphone's cap shader
+    @State private var image: CGImage?
     @State private var plus = 0.0
     @State private var minus = 0.0
     @State private var waiting = true
@@ -13,11 +14,10 @@ struct HomePodCap: View {
         GeometryReader { geo in
             let side = min(geo.size.width, geo.size.height)
             let _ = updateSide(side)
-            Rectangle()
+            Image(decorative: image ?? CapRenderer.render(leds: [], plus: 0, minus: 0), scale: 1)
+                .resizable()
+                .interpolation(.high)
                 .frame(width: side, height: side)
-                .colorEffect(ShaderLibrary.homePodCap(.float4(side / 2, side / 2, side / 2, 0), .floatArray(leds.isEmpty ? [0.5, 0.5, 0, 0, 0] : leds),
-                                                      .float(Float(plus)), .float(Float(minus))))
-                .clipShape(Circle())
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .contentShape(Rectangle())
@@ -112,7 +112,83 @@ struct HomePodCap: View {
             out += [Float(xs[i]), Float(1 - ys[i]), Float(p[0] / scale), Float(p[1] / scale), Float(p[2] / scale)]
         }
         leds = out
+        image = CapRenderer.render(leds: out, plus: Float(min(1, ((s["plus"] as? Double) ?? 0) / scale)),
+                                   minus: Float(min(1, ((s["minus"] as? Double) ?? 0) / scale)))
         plus = min(1, ((s["plus"] as? Double) ?? 0) / scale)
         minus = min(1, ((s["minus"] as? Double) ?? 0) / scale)
+    }
+}
+
+/// vphone's HomePod top cap shader (VPhoneHomePodShader's capFragment), run on the CPU into a small image:
+/// one optical model for all LEDs under the glass, etched − and + lit by their own channel, a faint rim.
+enum CapRenderer {
+    static let size = 192
+
+    private static func stroke(_ px: Float, _ py: Float, _ cx: Float, _ cy: Float, plus: Bool, _ aa: Float) -> Float {
+        let qx = abs(px - cx), qy = abs(py - cy)
+        let horizontal = max(qx - 0.052, qy - 0.0026)
+        let vertical = max(qx - 0.0026, qy - 0.052)
+        return 1 - smoothstep(-aa, aa, plus ? min(horizontal, vertical) : horizontal)
+    }
+
+    private static func smoothstep(_ a: Float, _ b: Float, _ x: Float) -> Float {
+        let t = min(max((x - a) / (b - a), 0), 1)
+        return t * t * (3 - 2 * t)
+    }
+
+    private static func encode(_ c: Float) -> UInt8 {
+        let v = min(max(c, 0), 1)
+        let e = v <= 0.0031308 ? v * 12.92 : 1.055 * pow(v, 1 / 2.4) - 0.055
+        return UInt8(min(255, max(0, e * 255 + 0.5)))
+    }
+
+    static func render(leds: [Float], plus plusLight: Float, minus minusLight: Float) -> CGImage {
+        let n = size
+        let radius = Float(n) / 2
+        let aa = 0.65 / radius
+        let count = leds.count / 5
+        var out = [UInt8](repeating: 0, count: n * n * 4)
+        let bg = encode(0.0044)
+        for y in 0..<n {
+            for x in 0..<n {
+                let px = (Float(x) + 0.5) / Float(n), py = (Float(y) + 0.5) / Float(n)
+                let dx0 = px - 0.5, dy0 = py - 0.5
+                let r = (dx0 * dx0 + dy0 * dy0).squareRoot() * 2
+                let o = (y * n + x) * 4
+                out[o + 3] = 255
+                if r > 1 + aa * 2 { out[o] = bg; out[o + 1] = bg; out[o + 2] = bg; continue }
+                var lr: Float = 0, lg: Float = 0, lb: Float = 0, wsum: Float = 0
+                for i in 0..<count {
+                    let dx = px - leds[i * 5], dy = py - leds[i * 5 + 1]
+                    let d2 = dx * dx + dy * dy
+                    let w = 0.86 * exp(-d2 / (2 * 0.155 * 0.155)) + 0.14 * exp(-d2 / (2 * 0.29 * 0.29))
+                    lr += leds[i * 5 + 2] * w; lg += leds[i * 5 + 3] * w; lb += leds[i * 5 + 4] * w
+                    wsum += w
+                }
+                let norm = 1 / max(wsum, 0.001)
+                let edge = (1 - smoothstep(0.70, 0.985, r)) * 1.55
+                var c = [lr * norm * edge, lg * norm * edge, lb * norm * edge].map { $0 / (1 + 0.45 * $0) }
+                let glass = 0.0014 + 0.0015 * pow(max(0, 1 - r * r), 3)
+                let rx = px - 0.38, ry = py - 0.24
+                let reflection = 0.0022 * exp(-(rx * rx + ry * ry) / 0.12)
+                let minus = stroke(px, py, 0.20, 0.5, plus: false, aa * 0.5)
+                let plus = stroke(px, py, 0.80, 0.5, plus: true, aa * 0.5)
+                let mark = max(minus, plus)
+                let rim = exp(-pow((r - 0.992) / max(aa * 1.7, 0.002), 2)) * 0.012
+                let cover = 1 - smoothstep(1 - aa, 1 + aa, r)
+                for k in 0..<3 {
+                    var v = c[k] + glass + reflection
+                    v = v + (0.006 + v * 0.12 - v) * mark
+                    v += (minus * minusLight + plus * plusLight) * 0.9 + rim
+                    c[k] = 0.0044 + (v - 0.0044) * cover
+                    out[o + k] = encode(c[k])
+                }
+            }
+        }
+        let provider = CGDataProvider(data: Data(out) as CFData)!
+        return CGImage(width: n, height: n, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: n * 4,
+                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+                       provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)!
     }
 }
