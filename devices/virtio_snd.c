@@ -137,8 +137,10 @@ static uint32_t control(HvVirtioSnd *d, const HvVirtqElem *e) {
             d->running = 1;
             d->clock_start_ns = now_ns();
             d->clock_start_consumed = atomic_load(&d->consumed);
-            if (d->backend.start && d->backend.start(d->backend.opaque, d->channels, d->format, d->rate_hz) != 0)
-                d->backend.start = NULL; /* the host cannot play it: drain by the clock instead */
+            int r = d->backend.start ? d->backend.start(d->backend.opaque, d->channels, d->format, d->rate_hz) : -2;
+            fprintf(stderr, "virtio-snd: guest starts playing (ch %u fmt %u rate %u): host %s\n", d->channels, d->format,
+                    d->rate_hz, r == 0 ? "plays it" : r == -2 ? "has no output" : "cannot play it");
+            if (r != 0) d->backend.start = NULL; /* the host cannot play it: drain by the clock instead */
         }
         break;
     case R_PCM_STOP:
@@ -147,6 +149,7 @@ static uint32_t control(HvVirtioSnd *d, const HvVirtqElem *e) {
             break;
         }
         if (d->running && d->backend.stop) d->backend.stop(d->backend.opaque);
+        if (d->running) fprintf(stderr, "virtio-snd: guest stops playing\n");
         d->running = 0;
         break;
     case R_PCM_RELEASE:
