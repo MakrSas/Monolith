@@ -136,6 +136,10 @@ static void forward_range(void) {
         tcp += slirp_add_hostfwd(slirp_for_fwd, 0, any, p, guest, p) == 0;
         udp += slirp_add_hostfwd(slirp_for_fwd, 1, any, p, guest, p) == 0;
     }
+    /* AirPlay 2's clock: PTP event and general messages. A host that keeps its own (a Mac's timed) holds them. */
+    for (int p = 319; p <= 320; p++)
+        if (slirp_add_hostfwd(slirp_for_fwd, 1, any, p, guest, p) != 0)
+            fprintf(stderr, "hengevm: PTP port %d is the host's own: AirPlay audio to the guest will not start\n", p);
     fprintf(stderr, "hengevm: forwarded guest ports %d-%d: %d TCP, %d UDP\n", first, last, tcp, udp);
 }
 
