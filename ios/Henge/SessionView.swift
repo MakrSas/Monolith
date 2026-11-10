@@ -88,11 +88,10 @@ struct SessionView: View {
                     .position(x: layout.screen.midX, y: layout.screen.midY)
                 if state != 2 {
                     if mac.isResearch && mac.screen.width == mac.screen.height && mac.screen.width <= 400 {
-                        HomePodCap() // a HomePod: its lit top surface, from the guest agent
+                        HomePodCap() // a HomePod: its lit top surface and its touches, through the guest agent
                             .frame(width: layout.screen.width, height: layout.screen.height)
                             .position(x: layout.screen.midX, y: layout.screen.midY)
-                    }
-                    if mac.isResearch {
+                    } else if mac.isResearch {
                         TouchScreen()
                             .frame(width: layout.screen.width, height: layout.screen.height)
                             .position(x: layout.screen.midX, y: layout.screen.midY)

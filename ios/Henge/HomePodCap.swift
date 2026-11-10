@@ -12,6 +12,7 @@ struct HomePodCap: View {
     var body: some View {
         GeometryReader { geo in
             let side = min(geo.size.width, geo.size.height)
+            let _ = updateSide(side)
             ZStack {
                 Circle().fill(Color(white: 0.06))
                 ForEach(leds.indices, id: \.self) { i in
@@ -37,8 +38,16 @@ struct HomePodCap: View {
             .clipShape(Circle())
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .allowsHitTesting(false)
+        .contentShape(Rectangle())
+        .gesture(DragGesture(minimumDistance: 0)
+            .onChanged { v in touch(at: v.startLocation, in: v, began: true) }
+            .onEnded { v in touch(at: v.startLocation, in: v, began: false) })
         .task { await poll() }
+    }
+
+    private func updateSide(_ s: CGFloat) -> Bool {
+        if side != s { DispatchQueue.main.async { side = s } }
+        return true
     }
 
     private func poll() async {
@@ -52,6 +61,37 @@ struct HomePodCap: View {
             }
             try? await Task.sleep(nanoseconds: waiting ? 1_000_000_000 : 50_000_000)
         }
+    }
+
+    // The top surface takes SoundBoard's own button events, as vphone sends them: 1 −, 2 +, 3 the centre;
+    // actions 1 touch might have begun, 2 tap, 3 hold began, 4 hold ended.
+    @State private var touchStart: Date?
+    @State private var touchButton = 3
+    @State private var holding = false
+    @State private var side: CGFloat = 1
+
+    private func touch(at p: CGPoint, in v: DragGesture.Value, began: Bool) {
+        if began, touchStart == nil {
+            touchStart = Date()
+            let x = p.x / max(side, 1)
+            touchButton = x < 0.33 ? 1 : x > 0.67 ? 2 : 3
+            send(1, touchButton, coalesced: false)
+            let started = touchStart
+            Task {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                if touchStart == started, started != nil { holding = true; send(3, touchButton, coalesced: false) }
+            }
+        } else if !began {
+            if holding { send(4, touchButton, coalesced: false) } else { send(2, touchButton, coalesced: true) }
+            touchStart = nil
+            holding = false
+        }
+    }
+
+    private func send(_ action: Int, _ button: Int, coalesced: Bool) {
+        let event: [String: Any] = ["action": action, "button": button, "coalesced": coalesced, "deviceSideways": false,
+                                    "numberOfTaps": 1, "startMachTime": 0]
+        Task { _ = await GuestAgent.rpc("homepod.debug.call", ["operation": "sendButtonCommand:", "arguments": ["event": event]], timeout: 5) }
     }
 
     /// The log gets each change of what the agent says (not every poll).
