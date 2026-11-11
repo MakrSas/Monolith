@@ -77,6 +77,11 @@ int apfs_rename(ApfsVolume *v, uint64_t from_dir, const char *from, uint64_t to_
 int apfs_commit(ApfsContainer *c);
 /* Another name for a file (a hard link). */
 int apfs_link(ApfsVolume *v, uint64_t id, uint64_t parent, const char *name);
+
+/* Sealed volumes. Check: 0 when every FILE_INFO record, node hash and the root hash hold (counts of
+   what does not in *bad_info, *bad_nodes; the recomputed root hash in root_hash). Reseal (writable):
+   rebuilds them all after writes, clears the broken flag; the new root hash in root_hash. */
+int apfs_seal_check(ApfsVolume *v, uint8_t root_hash[32], uint64_t *bad_info, uint64_t *bad_nodes, uint64_t *streams);
 /* One entry of a directory by name, and all of them (*out malloc'd). */
 int apfs_child(ApfsVolume *v, uint64_t dir, const char *name, uint64_t *id, uint16_t *type);
 int apfs_list(ApfsVolume *v, uint64_t dir, ApfsDirEntry **out, size_t *count);

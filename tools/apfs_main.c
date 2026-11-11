@@ -2,6 +2,7 @@
    apfs IMAGE                      the volumes
    apfs IMAGE VOL ls [PATH]        a directory
    apfs IMAGE VOL cat PATH > F     a file
+   apfs IMAGE VOL seal             checks a sealed volume's seal
    apfs IMAGE VOL find             every path, with sizes (a whole-volume read test)
    apfs IMAGE VOL mkdir PATH       writes: directories (like mkdir -p)
    apfs IMAGE VOL put FILE PATH [MODE]   a file from this machine into the image (created or replaced) */
@@ -65,6 +66,14 @@ int main(int argc, char **argv) {
     const char *at = strchr(argv[2], '@'); /* VOL@ the newest snapshot, VOL@NAME that one */
     if (at && apfs_use_snapshot(v, at[1] ? at + 1 : NULL)) { fprintf(stderr, "apfs: no such snapshot\n"); return 1; }
     if (!strcmp(argv[3], "snaps")) return apfs_snapshots(v, snap_cb, NULL) ? 1 : 0;
+    if (!strcmp(argv[3], "seal")) { /* seal: check the seal (FILE_INFO records, node hashes, root hash) */
+        uint8_t h[32]; uint64_t bi = 0, bn = 0, ns = 0;
+        int r = apfs_seal_check(v, h, &bi, &bn, &ns);
+        printf("streams %llu, bad file-info %llu, bad node hashes %llu\nroot ", (unsigned long long)ns, (unsigned long long)bi, (unsigned long long)bn);
+        for (int i = 0; i < 32; i++) printf("%02x", h[i]);
+        printf("\n%s\n", r == 0 ? "sealed" : r > 0 ? "NOT sealed" : "error");
+        return r ? 1 : 0;
+    }
     if (!strcmp(argv[3], "mkdir") || !strcmp(argv[3], "put") || !strcmp(argv[3], "rm") || !strcmp(argv[3], "ln") ||
         !strcmp(argv[3], "mv") || !strcmp(argv[3], "chmod") || !strcmp(argv[3], "link")) {
         apfs_close(c);

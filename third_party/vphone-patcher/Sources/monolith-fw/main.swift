@@ -14,6 +14,17 @@ let args = CommandLine.arguments
 func command(_ body: () throws -> Void) -> Never {
     do { try body(); print("done"); exit(0) } catch { print("error:", error); exit(1) }
 }
+/// monolith-fw aea-key FILE.aea: the image's symmetric key (fetched as vphone does), for `aea decrypt -key-value`.
+if args.count >= 3, args[1] == "aea-key" {
+    command {
+        let url = URL(fileURLWithPath: args[2])
+        let box = UnsafeMutablePointer<Result<String, Error>?>.allocate(capacity: 1); box.initialize(to: nil)
+        let done = DispatchSemaphore(value: 0)
+        Task { do { box.pointee = .success(try await VPhoneAEA.symmetricKey(of: url)) } catch { box.pointee = .failure(error) }; done.signal() }
+        done.wait()
+        print(try box.pointee!.get())
+    }
+}
 if args.count >= 5, args[1] == "new" {
     command {
         VPhoneResources.monolithBase = URL(fileURLWithPath: args[4])

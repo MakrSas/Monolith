@@ -385,6 +385,7 @@ found:
         ApfsVolume *v = &c->vol[c->nvol++];
         v->c = c;
         v->oid = oid;
+        v->sb_paddr = p;
         v->incompat = rd64(vb + 56);
         v->fs_flags = rd64(vb + 264);
         v->root_tree = rd64(vb + 136);
@@ -815,6 +816,7 @@ int apfs_use_snapshot(ApfsVolume *v, const char *name) {
 }
 
 #include "apfs_write.inc"
+#include "apfs_seal.inc"
 
 static int cached_block(ApfsContainer *c, uint64_t paddr, uint8_t *buf) {
     for (CEnt *e = c->w->bucket[paddr % CACHE_BUCKETS]; e; e = e->next)
