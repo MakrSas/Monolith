@@ -30,6 +30,7 @@
 #include <libtatsu/tss.h>
 
 #include "dfu.h"
+#include "openavb.h" /* Monolith (from vphone): OpenAVB boot ROMs */
 #include "recovery.h"
 #include "idevicerestore.h"
 #include "common.h"
@@ -195,6 +196,12 @@ int dfu_send_component(struct idevicerestore_client_t* client, plist_t build_ide
 		free(data);
 		data = newdata;
 		size += fillsize;
+	}
+
+	/* Monolith (from vphone): OpenAVB takes an iBSS only after its identity is uploaded. */
+	if (!strcmp(component, "iBSS") && openavb_describe_ibss(client->dfu->client, data, size) < 0) {
+		free(data);
+		return -1;
 	}
 
 	logger(LL_INFO, "Sending %s (%zu bytes)...\n", component, size);

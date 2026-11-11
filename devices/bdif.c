@@ -74,6 +74,17 @@ static uint32_t usb_xfer(HvBdif *b, uint64_t chain, int write, uint8_t *buf, uin
     return done;
 }
 
+/* A finished chain: its first descriptor says so (flags 0x8000) and how much was used, as Virtualization's
+   device does. Apple's ROM polls the register instead; OpenAVB polls this. */
+static void usb_complete(HvBdif *b, uint64_t chain, uint32_t used, int set_len) {
+    UsbDesc d;
+    if (hv_phys_read(b->m, chain, &d, sizeof d) != 0) return;
+    if (set_len) d.len = used;
+    d.flags = 0x8000;
+    void *p = hv_phys_ptr(b->m, chain, sizeof d);
+    if (p) { memcpy(p, &d, sizeof d); hv_dma_written(b->m, chain, sizeof d); }
+}
+
 /* Queue 0 has a buffer and the host has a request: fill it. */
 static void usb_deliver(HvBdif *b) {
     HvBdifUsbQ *q = &b->usb_q[0];
@@ -90,8 +101,9 @@ static void usb_deliver(HvBdif *b) {
         tmp[5] = m.type;
         if (payload) memcpy(tmp + 6, m.data, payload);
         if (room < 6 + payload) fprintf(stderr, "bdif usb: request ep %#x len %u does not fit a %u-byte buffer\n", m.ep, payload, room);
-        usb_xfer(b, q->pending, 1, tmp, 6 + payload, NULL);
+        uint32_t used = usb_xfer(b, q->pending, 1, tmp, 6 + payload, NULL);
         free(tmp);
+        usb_complete(b, q->pending, used, 1);
     }
     free(m.data);
     q->done = 1;
@@ -129,6 +141,7 @@ static void usb_write(HvBdif *b, uint64_t reg, uint64_t v) {
         uint32_t n = tmp ? usb_xfer(b, v, 0, tmp, room, NULL) : 0;
         if (n >= 2) hv_vusb_put_response(b->usb, tmp[0], tmp[1], tmp + 2, n - 2);
         free(tmp);
+        usb_complete(b, v, n, 0);
         q->done = 1;
         break;
     }

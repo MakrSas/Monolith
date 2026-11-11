@@ -55,7 +55,12 @@ static void *restore_thread(void *arg) {
         return NULL;
     }
     int flags = FLAG_ERASE;
-    if (getenv("HV_INSTALL_LOG")) flags |= FLAG_DEBUG;
+    if (getenv("HV_INSTALL_LOG")) {
+        flags |= FLAG_DEBUG;
+        extern int log_level;
+        log_level = 5; /* LL_DEBUG: idevicerestore's own messages to stderr */
+        setvbuf(stdout, NULL, _IONBF, 0); /* idevicerestore prints there */
+    }
     idevicerestore_set_flags(c, flags);
     idevicerestore_set_ipsw(c, g_ipsw);
     idevicerestore_set_cache_path(c, g_cache);
