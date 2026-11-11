@@ -461,7 +461,9 @@ private struct DeviceProgressView: View {
                             if i < installer.stage {
                                 Image(systemName: "checkmark").font(.system(size: 15, weight: .bold)).foregroundStyle(Desk.good)
                             } else if i == installer.stage {
-                                if i == 2, installer.stepProgress > 0 {
+                                if i == 0, installer.expected > 0, installer.downloaded < installer.expected {
+                                    ProgressView().controlSize(.small)
+                                } else if i == 2, installer.stepProgress > 0 {
                                     Text("\(Int(installer.stepProgress * 100))%").font(.system(size: 14)).monospacedDigit().foregroundStyle(Desk.dim)
                                 } else {
                                     ProgressView().controlSize(.small)
@@ -473,6 +475,22 @@ private struct DeviceProgressView: View {
                     }
                 }
                 .deskCard()
+                if installer.stage == 0, installer.expected > 0 {
+                    let fraction = min(Double(installer.downloaded) / Double(installer.expected), 1)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("\(Int(fraction * 100))%").font(.system(size: 44, weight: .bold)).monospacedDigit()
+                        Text("\(ByteText.string(UInt64(installer.downloaded))) of \(ByteText.string(UInt64(installer.expected)))"
+                             + (installer.speed > 1 ? " · \(ByteText.string(UInt64(installer.speed)))/s" : "")
+                             + (installer.speed > 1 && installer.downloaded < installer.expected
+                                ? " · about \(max(1, Int(Double(installer.expected - installer.downloaded) / installer.speed / 60))) min left" : ""))
+                            .font(.system(size: 15)).foregroundStyle(Desk.dim).monospacedDigit()
+                        DeskBar(fraction: fraction, height: 11)
+                    }
+                    .padding(.horizontal, 20).padding(.vertical, 18)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .deskCard(radius: 30)
+                    .padding(.top, 12)
+                }
             }
             DeskHeading("Log")
             LogTail().padding(14).frame(maxWidth: .infinity, alignment: .leading).deskCard()

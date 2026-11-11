@@ -36,6 +36,10 @@ final class DeviceInstaller: ObservableObject {
     @Published var stage = 0
     @Published var stepProgress = 0.0
     @Published var title = ""
+    /// The download: bytes so far of how many, and how fast (bytes a second).
+    @Published var downloaded: Int64 = 0
+    @Published var expected: Int64 = 0
+    @Published var speed: Double = 0
 
     var busy: Bool { phase == .running }
 
@@ -84,6 +88,8 @@ final class DeviceInstaller: ObservableObject {
         HengeLog.log("device-install", "\(kind.title) \(pairing.iosName) as \(name): \(vm.lastPathComponent), ECID \(ecid)")
 
         // 1. vphone's machine, its patch preset, and the firmware: downloaded, merged, prepared.
+        let watcher = Task { await watchDownload(pairing, cache: root.appendingPathComponent("ipsws", isDirectory: true)) }
+        defer { watcher.cancel() }
         try await off {
             let bundle = try VPhoneBundleOperations.create(.init(
                 name: slug, cpuCount: UInt(cpus), memoryMB: UInt64(kind.ramMB), diskSizeGB: 64,
@@ -138,6 +144,43 @@ final class DeviceInstaller: ObservableObject {
         Machines.shared.add(made)
         HengeLog.log("device-install", "\(made.name): installed, added to Devices")
         return made
+    }
+
+    /// How much of the firmware is here: the cache's bytes on disk (vphone's downloads grow from the front)
+    /// against the sizes Apple's server gives, once a second.
+    private func watchDownload(_ pairing: VPhoneFirmwarePairing, cache: URL) async {
+        downloaded = 0; expected = 0; speed = 0
+        var urls = [pairing.iosURL, pairing.cloudosURL]
+        if let ota = VPhoneFirmwareCatalog.otaRelease(source: pairing.iosURL), let base = VPhoneFirmwareCatalog.restoreBaseURL(for: ota) {
+            urls.append(base)
+        }
+        let start = Self.bytes(in: cache)
+        var total: Int64 = 0
+        for string in Set(urls) {
+            guard let url = URL(string: string) else { continue }
+            var request = URLRequest(url: url)
+            request.httpMethod = "HEAD"
+            if let (_, response) = try? await URLSession.shared.data(for: request) { total += max(response.expectedContentLength, 0) }
+        }
+        expected = total
+        var last = start, lastTime = Date()
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            let now = Self.bytes(in: cache), t = Date()
+            downloaded = max(now - start, 0)
+            let rate = Double(now - last) / max(t.timeIntervalSince(lastTime), 0.5)
+            speed = speed == 0 ? max(rate, 0) : speed * 0.7 + max(rate, 0) * 0.3
+            last = now; lastTime = t
+        }
+    }
+
+    nonisolated static func bytes(in directory: URL) -> Int64 {
+        guard let walk = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.totalFileAllocatedSizeKey]) else { return 0 }
+        var sum: Int64 = 0
+        for case let url as URL in walk {
+            sum += Int64((try? url.resourceValues(forKeys: [.totalFileAllocatedSizeKey]).totalFileAllocatedSize) ?? 0)
+        }
+        return sum
     }
 
     private func restore(vm: URL, tree: URL, mac: VirtualMac, cpus: Int) async throws {
