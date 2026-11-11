@@ -4967,7 +4967,11 @@ public struct VPhoneCustomFirmwareInstaller {
         let parent = try VPhoneConfinedDirectory.pin(absolutePath: workParent, requireOwner: geteuid()) // MONOLITH: root, or the app
         let parentMode = try parent.metadata().st_mode & 0o7777
         let privateDirectory = parentMode & 0o077 == 0
+        #if os(macOS) // MONOLITH
         let stickySharedDirectory = parentMode & 0o1777 == 0o1777
+        #else // MONOLITH: an app's container is private to it whatever the mode bits say
+        let stickySharedDirectory = true
+        #endif
         guard privateDirectory || stickySharedDirectory else {
             throw ValidationError("The CFW work folder parent \(workParent) must be root-owned and private or sticky.")
         }
