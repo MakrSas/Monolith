@@ -61,9 +61,10 @@ struct ApfsVolume {
     uint64_t xid;                         /* the state looked at: the container's, or a snapshot's */
     uint64_t snap_meta;                   /* physical: the snapshot metadata tree */
     /* writing */
-    uint64_t sb_paddr, next_obj_id, extentref_root, snap_xid_max, files_added, dirs_added;
+    uint64_t sb_paddr, next_obj_id, extentref_root, snap_xid_max;
+    int64_t files_added, dirs_added, symlinks_added;
     int64_t alloced;
-    int sb_dirty;
+    int sb_dirty, counted;
 };
 
 struct ApfsContainer {

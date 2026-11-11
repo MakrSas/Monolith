@@ -65,14 +65,35 @@ int main(int argc, char **argv) {
     const char *at = strchr(argv[2], '@'); /* VOL@ the newest snapshot, VOL@NAME that one */
     if (at && apfs_use_snapshot(v, at[1] ? at + 1 : NULL)) { fprintf(stderr, "apfs: no such snapshot\n"); return 1; }
     if (!strcmp(argv[3], "snaps")) return apfs_snapshots(v, snap_cb, NULL) ? 1 : 0;
-    if (!strcmp(argv[3], "mkdir") || !strcmp(argv[3], "put")) {
+    if (!strcmp(argv[3], "mkdir") || !strcmp(argv[3], "put") || !strcmp(argv[3], "rm") || !strcmp(argv[3], "ln") ||
+        !strcmp(argv[3], "mv") || !strcmp(argv[3], "chmod")) {
         apfs_close(c);
         c = apfs_open_rw(argv[1], err, sizeof err);
         if (!c) { fprintf(stderr, "apfs: %s\n", err); return 1; }
         v = apfs_volume(c, atoi(argv[2]));
         uint64_t id;
         int r;
-        if (!strcmp(argv[3], "mkdir")) {
+        /* the parent directory's id and the leaf of a path */
+        #define SPLIT(path, dirid, leaf) char dirbuf_[4096]; snprintf(dirbuf_, sizeof dirbuf_, "%s", path); \
+            char *sl_ = strrchr(dirbuf_, '/'); const char *leaf = sl_ ? sl_ + 1 : dirbuf_; if (sl_) *sl_ = 0; \
+            ApfsInode di_; uint64_t dirid = apfs_lookup(v, dirbuf_, &di_) ? 0 : di_.id
+        if (!strcmp(argv[3], "rm") && argc > 4) {
+            SPLIT(argv[4], d, leaf);
+            r = d ? apfs_unlink(v, d, leaf) : -1;
+        } else if (!strcmp(argv[3], "ln") && argc > 5) {        /* ln TARGET PATH */
+            SPLIT(argv[5], d, leaf);
+            r = d ? apfs_symlink(v, d, leaf, argv[4], 0, 0) : -1;
+        } else if (!strcmp(argv[3], "mv") && argc > 5) {
+            char from[4096];
+            snprintf(from, sizeof from, "%s", argv[4]);
+            char *s1 = strrchr(from, '/'); const char *fleaf = s1 ? s1 + 1 : from; if (s1) *s1 = 0;
+            ApfsInode fi; uint64_t fd_ = apfs_lookup(v, from, &fi) ? 0 : fi.id;
+            SPLIT(argv[5], d, leaf);
+            r = fd_ && d ? apfs_rename(v, fd_, fleaf, d, leaf) : -1;
+        } else if (!strcmp(argv[3], "chmod") && argc > 5) {   /* chmod MODE PATH */
+            ApfsInode in;
+            r = apfs_lookup(v, argv[5], &in) ? -1 : apfs_chmod(v, in.id, (uint16_t)strtol(argv[4], NULL, 8), (uint32_t)-1, (uint32_t)-1);
+        } else if (!strcmp(argv[3], "mkdir")) {
             r = argc > 4 ? apfs_mkdirs(v, argv[4], 0755, 0, 0, &id) : -1;
         } else {
             if (argc < 6) return 2;

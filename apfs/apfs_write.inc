@@ -640,18 +640,20 @@ int apfs_commit(ApfsContainer *c) {
     /* volumes' counters */
     for (int i = 0; i < c->nvol; i++) {
         ApfsVolume *v = &c->vol[i];
-        if (!v->alloced && !v->sb_dirty) continue;
+        if (!v->alloced && !v->sb_dirty && !v->files_added && !v->dirs_added && !v->symlinks_added && !v->counted) continue;
+        v->counted = 0;
         uint8_t *sb = malloc(c->bs);
         if (pread(c->fd, sb, c->bs, (off_t)(c->base + v->sb_paddr * c->bs)) != (ssize_t)c->bs) { free(sb); return werr(c, "volume superblock"); }
         wr64(sb + 88, rd64(sb + 88) + v->alloced);      /* fs_alloc_count */
         wr64(sb + 176, v->next_obj_id);                 /* next_obj_id */
         wr64(sb + 184, rd64(sb + 184) + v->files_added);
         wr64(sb + 192, rd64(sb + 192) + v->dirs_added);
+        wr64(sb + 200, rd64(sb + 200) + v->symlinks_added);
         wr64(sb + 256, now_ns());                        /* last_mod_time */
         wr64(sb, fletcher64(sb, c->bs));
         if (pwrite(c->fd, sb, c->bs, (off_t)(c->base + v->sb_paddr * c->bs)) != (ssize_t)c->bs) { free(sb); return werr(c, "write failed"); }
         free(sb);
-        v->alloced = v->files_added = v->dirs_added = 0;
+        v->alloced = v->files_added = v->dirs_added = v->symlinks_added = 0;
         v->sb_dirty = 0;
     }
     wr64(w->nx, fletcher64(w->nx, c->bs));
@@ -768,10 +770,10 @@ static int dir_key(ApfsVolume *v, uint64_t parent, const char *name, uint8_t *k,
     return 0;
 }
 
-/* j_inode_val_t (92 bytes) and, for files, a data-stream xfield. */
+/* j_inode_val_t (92 bytes), then xfields: the name (as Apple writes it) and, for files, the data stream. */
 static uint16_t inode_val(uint8_t *v, uint64_t parent, uint64_t id, uint16_t mode, uint32_t uid, uint32_t gid, int32_t links,
-                          int file, uint64_t size, uint64_t alloced) {
-    memset(v, 0, 160);
+                          int file, uint64_t size, uint64_t alloced, const char *name) {
+    memset(v, 0, 512);
     uint64_t t = now_ns();
     wr64(v, parent);
     wr64(v + 8, id);
@@ -781,15 +783,25 @@ static uint16_t inode_val(uint8_t *v, uint64_t parent, uint64_t id, uint16_t mod
     wr32(v + 72, uid);
     wr32(v + 76, gid);
     wr16(v + 80, mode);
-    if (!file) return 92;
     uint8_t *x = v + 92;
-    wr16(x, 1);                      /* one xfield */
-    wr16(x + 2, 40);                 /* its data */
-    x[4] = INO_EXT_TYPE_DSTREAM; x[5] = 0x20 /* XF_SYSTEM_FIELD */; wr16(x + 6, 40);
-    wr64(x + 8, size);
-    wr64(x + 16, alloced);
-    wr64(x + 32, size);              /* total_bytes_written */
-    return 92 + 8 + 40;
+    uint16_t nlen = name ? (uint16_t)(strlen(name) + 1) : 0, n = 0, data = 0;
+    uint8_t *hdr = x + 4;
+    int fields = (nlen ? 1 : 0) + (file ? 1 : 0);
+    uint8_t *d = x + 4 + 4 * fields;
+    if (nlen) {
+        hdr[0] = 4 /* INO_EXT_TYPE_NAME */; hdr[1] = 0x02 /* XF_DO_NOT_COPY */; wr16(hdr + 2, nlen);
+        memcpy(d, name, nlen);
+        d += (nlen + 7) & ~7; data += (nlen + 7) & ~7; hdr += 4; n++;
+    }
+    if (file) {
+        hdr[0] = INO_EXT_TYPE_DSTREAM; hdr[1] = 0x20 /* XF_SYSTEM_FIELD */; wr16(hdr + 2, 40);
+        wr64(d, size); wr64(d + 8, alloced); wr64(d + 24, size); /* total_bytes_written */
+        d += 40; data += 40; n++;
+    }
+    if (!n) return 92;
+    wr16(x, n);
+    wr16(x + 2, data);
+    return (uint16_t)(92 + 4 + 4 * n + data);
 }
 
 static int inode_put(ApfsVolume *v, const uint8_t *val, uint16_t vl, uint64_t id, int replace) {
@@ -857,8 +869,8 @@ int apfs_mkdir(ApfsVolume *v, uint64_t parent, const char *name, uint16_t mode, 
         return 0;
     }
     uint64_t id = v->next_obj_id++;
-    uint8_t val[160];
-    uint16_t vl = inode_val(val, parent, id, (uint16_t)(0040000 | (mode & 07777)), uid, gid, 0, 0, 0, 0);
+    uint8_t val[512];
+    uint16_t vl = inode_val(val, parent, id, (uint16_t)(0040000 | (mode & 07777)), uid, gid, 0, 0, 0, 0, name);
     if (inode_put(v, val, vl, id, 0) || add_entry(v, parent, name, id, 4)) return -1;
     v->dirs_added++;
     *out = id;
@@ -1048,7 +1060,7 @@ int apfs_write_file(ApfsVolume *v, uint64_t parent, const char *name, const uint
     ChildFind f = {name, 0, 0, 0};
     if (apfs_readdir(v, parent, child_cb, &f)) return werr(v->c, "no directory %llu", (unsigned long long)parent);
     uint64_t id, alloced;
-    uint8_t val[160];
+    uint8_t val[512];
     if (f.found) {
         if (f.type != 8) return werr(v->c, "%s exists and is not a file", name);
         id = f.id;
@@ -1067,14 +1079,14 @@ int apfs_write_file(ApfsVolume *v, uint64_t parent, const char *name, const uint
         wr64(xk, id | (uint64_t)APFS_TYPE_XATTR << OBJ_TYPE_SHIFT); wr16(xk + 8, 0); xk[10] = 0;
         if (wdelete(&t, xk, 11, match_xattr_name, names) < 0) return -1;
         if (write_stream(v, id, data, len, &alloced) || stream_id_put(v, id, len)) return -1;
-        uint16_t vl = inode_val(val, parent, id, (uint16_t)(0100000 | (mode & 07777)), uid, gid, (int32_t)rd32(rf.v + 56), 1, len, alloced);
+        uint16_t vl = inode_val(val, parent, id, (uint16_t)(0100000 | (mode & 07777)), uid, gid, (int32_t)rd32(rf.v + 56), 1, len, alloced, name);
         wr64(val + 16, rd64(rf.v + 16)); /* keep the creation time */
         return inode_put(v, val, vl, id, 1);
     }
     id = v->next_obj_id++;
     if (write_stream(v, id, data, len, &alloced)) return -1;
     if (stream_id_put(v, id, len)) return -1;
-    uint16_t vl = inode_val(val, parent, id, (uint16_t)(0100000 | (mode & 07777)), uid, gid, 1, 1, len, alloced);
+    uint16_t vl = inode_val(val, parent, id, (uint16_t)(0100000 | (mode & 07777)), uid, gid, 1, 1, len, alloced, name);
     if (inode_put(v, val, vl, id, 0) || add_entry(v, parent, name, id, 8)) return -1;
     v->files_added++;
     return 0;
@@ -1113,4 +1125,138 @@ int apfs_mkdirs(ApfsVolume *v, const char *path, uint16_t mode, uint32_t uid, ui
     }
     *out = id;
     return 0;
+}
+
+/* ---- more of a file system: links, removal, renames, owners ---- */
+
+int apfs_symlink(ApfsVolume *v, uint64_t parent, const char *name, const char *target, uint32_t uid, uint32_t gid) {
+    ChildFind f = {name, 0, 0, 0};
+    if (apfs_readdir(v, parent, child_cb, &f)) return werr(v->c, "no directory %llu", (unsigned long long)parent);
+    if (f.found) return werr(v->c, "%s exists", name);
+    uint64_t id = v->next_obj_id++;
+    uint8_t val[512];
+    uint16_t vl = inode_val(val, parent, id, 0120755, uid, gid, 1, 0, 0, 0, name);
+    if (inode_put(v, val, vl, id, 0)) return -1;
+    size_t n = strlen(target) + 1;
+    uint8_t k[40], *xv = malloc(4 + n);
+    static const char attr[] = "com.apple.fs.symlink";
+    wr64(k, id | (uint64_t)APFS_TYPE_XATTR << OBJ_TYPE_SHIFT);
+    wr16(k + 8, sizeof attr);
+    memcpy(k + 10, attr, sizeof attr);
+    wr16(xv, XATTR_DATA_EMBEDDED | 0x4 /* XATTR_FILE_SYSTEM_OWNED */);
+    wr16(xv + 2, (uint16_t)n);
+    memcpy(xv + 4, target, n);
+    WTree t = fs_wtree(v);
+    int r = winsert(&t, k, (uint16_t)(10 + sizeof attr), xv, (uint16_t)(4 + n), 0);
+    free(xv);
+    if (r || add_entry(v, parent, name, id, 10 /* DT_LNK */)) return -1;
+    v->symlinks_added++;
+    return 0;
+}
+
+int apfs_readlink(ApfsVolume *v, uint64_t id, char *out, size_t len) {
+    uint8_t *d;
+    size_t n;
+    if (apfs_xattr(v, id, "com.apple.fs.symlink", &d, &n)) return -1;
+    snprintf(out, len, "%.*s", (int)n, (const char *)d);
+    free(d);
+    return 0;
+}
+
+/* Mode and owner (and the change time). uid/gid of (uint32_t)-1 stay. */
+int apfs_chmod(ApfsVolume *v, uint64_t id, uint16_t mode, uint32_t uid, uint32_t gid) {
+    RawFind f;
+    if (inode_raw(v, id, &f)) return werr(v->c, "no inode %llu", (unsigned long long)id);
+    wr16(f.v + 80, (uint16_t)((rd16(f.v + 80) & 0170000) | (mode & 07777)));
+    if (uid != (uint32_t)-1) wr32(f.v + 72, uid);
+    if (gid != (uint32_t)-1) wr32(f.v + 76, gid);
+    wr64(f.v + 32, now_ns());
+    return inode_put(v, f.v, f.vl, id, 1);
+}
+
+typedef struct { uint64_t hdr; const char *name; int hashed; } DrecMatch;
+
+static int match_one_drec(const uint8_t *k, uint16_t kl, void *ctx) {
+    (void)kl;
+    const DrecMatch *m = ctx;
+    return rd64(k) == m->hdr && !strcmp((const char *)k + (m->hashed ? 12 : 10), m->name);
+}
+
+static int del_entry(ApfsVolume *v, uint64_t parent, const char *name) {
+    uint8_t k[300];
+    uint16_t kl;
+    if (dir_key(v, parent, name, k, &kl)) return werr(v->c, "bad name");
+    DrecMatch m = {rd64(k), name, v->hashed_names};
+    WTree t = fs_wtree(v);
+    int n = wdelete(&t, k, kl, match_one_drec, &m);
+    if (n < 0) return -1;
+    if (n != 1) return werr(v->c, "no entry %s", name);
+    return dir_touch(v, parent, -1);
+}
+
+typedef struct { uint64_t id; } IdOnly;
+
+static int match_inode_records(const uint8_t *k, uint16_t kl, void *ctx) {
+    (void)kl;
+    uint64_t h = rd64(k);
+    uint8_t type = (uint8_t)(h >> OBJ_TYPE_SHIFT);
+    return (h & OBJ_ID_MASK) == ((IdOnly *)ctx)->id && (type == APFS_TYPE_INODE || type == APFS_TYPE_XATTR);
+}
+
+/* Removes a file, link or empty directory. */
+int apfs_unlink(ApfsVolume *v, uint64_t parent, const char *name) {
+    ChildFind f = {name, 0, 0, 0};
+    if (apfs_readdir(v, parent, child_cb, &f)) return werr(v->c, "no directory");
+    if (!f.found) return werr(v->c, "no entry %s", name);
+    RawFind rf;
+    if (inode_raw(v, f.id, &rf)) return werr(v->c, "no inode for %s", name);
+    uint16_t mode = rd16(rf.v + 80);
+    if ((mode & 0170000) == 0040000 && rd32(rf.v + 56)) return werr(v->c, "%s is not empty", name);
+    if (del_entry(v, parent, name)) return -1;
+    if ((mode & 0170000) == 0100000 && (int32_t)rd32(rf.v + 56) > 1) { /* other hard links stay */
+        wr32(rf.v + 56, rd32(rf.v + 56) - 1);
+        return inode_put(v, rf.v, rf.vl, f.id, 1);
+    }
+    /* the data (its own stream and a resource fork's) and every record of the inode */
+    RawXattr rx = {"com.apple.ResourceFork", 0, 0, 0};
+    fs_records(v, f.id, APFS_TYPE_XATTR, rawx_cb, &rx);
+    if (rx.found && (rx.flags & XATTR_DATA_STREAM) && drop_stream(v, rx.stream)) return -1;
+    if ((mode & 0170000) == 0100000 && drop_stream(v, rd64(rf.v + 8))) return -1;
+    IdOnly io = {f.id};
+    uint8_t from[8];
+    wr64(from, f.id | (uint64_t)APFS_TYPE_INODE << OBJ_TYPE_SHIFT);
+    WTree t = fs_wtree(v);
+    if (wdelete(&t, from, 8, match_inode_records, &io) < 0) return -1;
+    if ((mode & 0170000) == 0040000) v->dirs_added--;
+    else if ((mode & 0170000) == 0120000) v->symlinks_added--;
+    else v->files_added--;
+    return 0;
+}
+
+/* Moves an entry (any kind) to another name or directory; an existing target is replaced if it is not a
+   directory. */
+int apfs_rename(ApfsVolume *v, uint64_t from_dir, const char *from, uint64_t to_dir, const char *to) {
+    ChildFind f = {from, 0, 0, 0};
+    if (apfs_readdir(v, from_dir, child_cb, &f) || !f.found) return werr(v->c, "no entry %s", from);
+    ChildFind g = {to, 0, 0, 0};
+    apfs_readdir(v, to_dir, child_cb, &g);
+    if (g.found) {
+        if (g.type == 4) return werr(v->c, "%s is a directory", to);
+        if (apfs_unlink(v, to_dir, to)) return -1;
+    }
+    if (del_entry(v, from_dir, from) || add_entry(v, to_dir, to, f.id, f.type)) return -1;
+    RawFind rf;
+    if (inode_raw(v, f.id, &rf)) return -1;
+    wr64(rf.v, to_dir);
+    /* the name xfield, if any, says the new name (rebuilt with the same fields) */
+    uint16_t mode = rd16(rf.v + 80);
+    uint8_t val[512];
+    uint16_t sz;
+    const uint8_t *ds = xfield(rf.v + 92, (uint16_t)(rf.vl - 92), INO_EXT_TYPE_DSTREAM, &sz);
+    uint64_t size = ds ? rd64(ds) : 0, alloced = ds ? rd64(ds + 8) : 0;
+    uint16_t vl = inode_val(val, to_dir, f.id, mode, rd32(rf.v + 72), rd32(rf.v + 76), (int32_t)rd32(rf.v + 56), ds != NULL, size,
+                            alloced, to);
+    memcpy(val + 8, rf.v + 8, 92 - 8); /* everything else as it was */
+    wr64(val, to_dir);
+    return inode_put(v, val, vl, f.id, 1);
 }

@@ -67,6 +67,13 @@ int apfs_mkdirs(ApfsVolume *v, const char *path, uint16_t mode, uint32_t uid, ui
 int apfs_write_file(ApfsVolume *v, uint64_t parent, const char *name, const uint8_t *data, size_t len, uint16_t mode,
                     uint32_t uid, uint32_t gid);
 int apfs_set_xattr(ApfsVolume *v, uint64_t id, const char *name, const uint8_t *data, size_t len);
+int apfs_symlink(ApfsVolume *v, uint64_t parent, const char *name, const char *target, uint32_t uid, uint32_t gid);
+int apfs_readlink(ApfsVolume *v, uint64_t id, char *out, size_t len);
+/* Mode bits (07777) and owner; (uint32_t)-1 keeps an id. */
+int apfs_chmod(ApfsVolume *v, uint64_t id, uint16_t mode, uint32_t uid, uint32_t gid);
+/* A file, symlink or empty directory. */
+int apfs_unlink(ApfsVolume *v, uint64_t parent, const char *name);
+int apfs_rename(ApfsVolume *v, uint64_t from_dir, const char *from, uint64_t to_dir, const char *to);
 int apfs_commit(ApfsContainer *c);
 
 #endif
