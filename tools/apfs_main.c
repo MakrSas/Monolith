@@ -2,7 +2,9 @@
    apfs IMAGE                      the volumes
    apfs IMAGE VOL ls [PATH]        a directory
    apfs IMAGE VOL cat PATH > F     a file
-   apfs IMAGE VOL find             every path, with sizes (a whole-volume read test) */
+   apfs IMAGE VOL find             every path, with sizes (a whole-volume read test)
+   apfs IMAGE VOL mkdir PATH       writes: directories (like mkdir -p)
+   apfs IMAGE VOL put FILE PATH [MODE]   a file from this machine into the image (created or replaced) */
 #include "apfs.h"
 
 #include <stdio.h>
@@ -63,6 +65,38 @@ int main(int argc, char **argv) {
     const char *at = strchr(argv[2], '@'); /* VOL@ the newest snapshot, VOL@NAME that one */
     if (at && apfs_use_snapshot(v, at[1] ? at + 1 : NULL)) { fprintf(stderr, "apfs: no such snapshot\n"); return 1; }
     if (!strcmp(argv[3], "snaps")) return apfs_snapshots(v, snap_cb, NULL) ? 1 : 0;
+    if (!strcmp(argv[3], "mkdir") || !strcmp(argv[3], "put")) {
+        apfs_close(c);
+        c = apfs_open_rw(argv[1], err, sizeof err);
+        if (!c) { fprintf(stderr, "apfs: %s\n", err); return 1; }
+        v = apfs_volume(c, atoi(argv[2]));
+        uint64_t id;
+        int r;
+        if (!strcmp(argv[3], "mkdir")) {
+            r = argc > 4 ? apfs_mkdirs(v, argv[4], 0755, 0, 0, &id) : -1;
+        } else {
+            if (argc < 6) return 2;
+            FILE *f = fopen(argv[4], "rb");
+            if (!f) { perror(argv[4]); return 1; }
+            fseek(f, 0, SEEK_END);
+            long len = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            uint8_t *d = malloc(len ? (size_t)len : 1);
+            fread(d, 1, (size_t)len, f);
+            fclose(f);
+            char dir[4096];
+            snprintf(dir, sizeof dir, "%s", argv[5]);
+            char *slash = strrchr(dir, '/');
+            const char *name = slash ? slash + 1 : dir;
+            if (slash) *slash = 0;
+            r = apfs_mkdirs(v, dir, 0755, 0, 0, &id);
+            if (!r) r = apfs_write_file(v, id, name, d, (size_t)len, argc > 6 ? (uint16_t)strtol(argv[6], NULL, 8) : 0644, 0, 0);
+            free(d);
+        }
+        if (!r) r = apfs_commit(c);
+        if (r) { fprintf(stderr, "apfs: %s\n", apfs_error(c)); return 1; }
+        return 0;
+    }
     Walk w = {v, "", 0, 0, 0, 0, 0};
     const char *path = argc > 4 ? argv[4] : "/";
     ApfsInode ino;

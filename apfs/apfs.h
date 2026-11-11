@@ -56,4 +56,17 @@ int apfs_read_file(ApfsVolume *v, const ApfsInode *ino, uint8_t **out, size_t *l
 /* An extended attribute's value. */
 int apfs_xattr(ApfsVolume *v, uint64_t id, const char *name, uint8_t **out, size_t *len);
 
+/* ---- writing (apfs_write.inc) ----
+   Changes are kept in memory until apfs_commit, which writes them and the checkpoint's superblock.
+   Names are ASCII. A replaced file's old blocks stay allocated (a snapshot may use them). */
+ApfsContainer *apfs_open_rw(const char *path, char *err, size_t errlen);
+const char *apfs_error(ApfsContainer *c);
+int apfs_mkdir(ApfsVolume *v, uint64_t parent, const char *name, uint16_t mode, uint32_t uid, uint32_t gid, uint64_t *id);
+int apfs_mkdirs(ApfsVolume *v, const char *path, uint16_t mode, uint32_t uid, uint32_t gid, uint64_t *id);
+/* Creates the file, or replaces an existing one's contents (and drops its compression). */
+int apfs_write_file(ApfsVolume *v, uint64_t parent, const char *name, const uint8_t *data, size_t len, uint16_t mode,
+                    uint32_t uid, uint32_t gid);
+int apfs_set_xattr(ApfsVolume *v, uint64_t id, const char *name, const uint8_t *data, size_t len);
+int apfs_commit(ApfsContainer *c);
+
 #endif

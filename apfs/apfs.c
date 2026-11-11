@@ -60,6 +60,10 @@ struct ApfsVolume {
     int hashed_names;                     /* directory records keyed by name hash */
     uint64_t xid;                         /* the state looked at: the container's, or a snapshot's */
     uint64_t snap_meta;                   /* physical: the snapshot metadata tree */
+    /* writing */
+    uint64_t sb_paddr, next_obj_id, extentref_root, snap_xid_max, files_added, dirs_added;
+    int64_t alloced;
+    int sb_dirty;
 };
 
 struct ApfsContainer {
@@ -71,6 +75,7 @@ struct ApfsContainer {
     uint64_t omap_root; /* physical */
     int nvol;
     ApfsVolume vol[MAX_VOLUMES];
+    struct Writer *w;   /* opened for writing */
 };
 
 static int debug_on(void) {
@@ -92,12 +97,16 @@ static uint64_t fletcher64(const uint8_t *p, size_t len) {
     return c2 << 32 | c1;
 }
 
+static int cached_block(ApfsContainer *c, uint64_t paddr, uint8_t *buf);
+
 static int read_block(ApfsContainer *c, uint64_t paddr, uint8_t *buf) {
     if (paddr >= c->blocks) return -1;
+    if (c->w && cached_block(c, paddr, buf)) return 0;
     return pread(c->fd, buf, c->bs, (off_t)(c->base + paddr * c->bs)) == (ssize_t)c->bs ? 0 : -1;
 }
 
 static int read_object(ApfsContainer *c, uint64_t paddr, uint8_t *buf) {
+    if (c->w && cached_block(c, paddr, buf)) return 0; /* changed in this commit: its checksum comes later */
     if (read_block(c, paddr, buf)) return -1;
     return rd64(buf) == fletcher64(buf, c->bs) ? 0 : -1;
 }
@@ -393,8 +402,11 @@ found:
     return c;
 }
 
+static void writer_free(ApfsContainer *c);
+
 void apfs_close(ApfsContainer *c) {
     if (!c) return;
+    writer_free(c);
     if (c->fd >= 0) close(c->fd);
     free(c);
 }
@@ -799,4 +811,22 @@ int apfs_use_snapshot(ApfsVolume *v, const char *name) {
     }
     free(vb);
     return r;
+}
+
+#include "apfs_write.inc"
+
+static int cached_block(ApfsContainer *c, uint64_t paddr, uint8_t *buf) {
+    for (CEnt *e = c->w->bucket[paddr % CACHE_BUCKETS]; e; e = e->next)
+        if (paddr >= e->paddr && paddr < e->paddr + e->nblocks && e->paddr == paddr) { memcpy(buf, e->b, c->bs); return 1; }
+    return 0;
+}
+
+static void writer_free(ApfsContainer *c) {
+    Writer *w = c->w;
+    if (!w) return;
+    for (int i = 0; i < CACHE_BUCKETS; i++)
+        for (CEnt *e = w->bucket[i], *n; e; e = n) { n = e->next; free(e->b); free(e); }
+    free(w->nx);
+    free(w);
+    c->w = NULL;
 }
