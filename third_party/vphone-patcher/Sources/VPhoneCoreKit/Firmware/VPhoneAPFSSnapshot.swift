@@ -1,4 +1,3 @@
-#if os(macOS) // MONOLITH: not built for iOS (the patchers do not use it)
 import Foundation
 
 // MARK: - VPhoneAPFSSnapshotError
@@ -322,4 +321,3 @@ public enum VPhoneAPFSSnapshot {
     }
 }
 
-#endif // MONOLITH

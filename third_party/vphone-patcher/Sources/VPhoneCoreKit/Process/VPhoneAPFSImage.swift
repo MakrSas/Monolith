@@ -24,6 +24,11 @@ public final class VPhoneAPFSImage: @unchecked Sendable {
         (0 ..< apfs_volume_count(container)).compactMap { apfs_volume(container, $0).map { String(cString: apfs_volume_name($0)) } }
     }
 
+    /// A volume's role (APFS_VOL_ROLE_*), by index.
+    public func volumeRole(_ index: Int) -> UInt16 {
+        apfs_volume(container, Int32(index)).map { apfs_volume_role($0) } ?? 0
+    }
+
     /// A volume's root directory (its live state; a sealed system's snapshot is not what is written).
     public func volume(named name: String) throws -> VPhoneConfinedDirectory {
         for i in 0 ..< apfs_volume_count(container) {

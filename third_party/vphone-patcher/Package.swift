@@ -22,7 +22,12 @@ let package = Package(
         .target(name: "VPhoneArchiveKit", dependencies: ["VPhoneCoreKit", .product(name: "ArchiveKit", package: "libarchive.xcframework")]),
         .target(name: "VPhoneCoreKit", dependencies: ["MonolithAPFS", .product(name: "ArchiveKit", package: "libarchive.xcframework"),
                                                       .product(name: "ArgumentParser", package: "swift-argument-parser")]),
-        .executableTarget(name: "monolith-fw", dependencies: ["VPhoneCoreKit", "FirmwarePatcher"]),
+        // MONOLITH: vphone-cli's custom-firmware installer and what it needs from the command target.
+        .target(name: "VPhoneInstaller", dependencies: ["VPhoneCoreKit", "FirmwarePatcher", "VPhonePatchKit", "VPhoneSign", "VPhoneArchiveKit",
+                                                        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                                                        .product(name: "MachOKit", package: "MachOKit"),
+                                                        .product(name: "Img4tool", package: "libimg4-spm")]),
+        .executableTarget(name: "monolith-fw", dependencies: ["VPhoneCoreKit", "FirmwarePatcher", "VPhoneInstaller"]),
         .target(name: "FirmwarePatcher", dependencies: ["VPhonePatchKit", "VPhoneSign", "VPhoneCoreKit", "VPhoneArchiveKit",
                                                         .product(name: "MachOKit", package: "MachOKit"),
                                                         .product(name: "Img4tool", package: "libimg4-spm"),

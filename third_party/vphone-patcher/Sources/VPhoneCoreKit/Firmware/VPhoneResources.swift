@@ -74,7 +74,11 @@ public struct VPhoneResources: Sendable {
         runningExecutable().deletingLastPathComponent().appendingPathComponent(name)
     }
 
+    /// MONOLITH: where the host app keeps vphone's resources (there is no vphone bundle around it).
+    nonisolated(unsafe) public static var monolithBase: URL?
+
     public static func resolve(executablePath: String? = nil) -> VPhoneResources {
+        if let monolithBase { return VPhoneResources(base: monolithBase) }
         let exe = executablePath.map { realPath(URL(fileURLWithPath: $0)) }
             ?? runningExecutable()
         let macos = exe.deletingLastPathComponent() // …/Contents/MacOS

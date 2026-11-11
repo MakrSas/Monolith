@@ -1,4 +1,3 @@
-#if os(macOS) // MONOLITH: not built for iOS (the patchers do not use it)
 import Foundation
 
 // MARK: - VPhoneGuestEnvironment
@@ -44,4 +43,3 @@ public enum VPhoneGuestEnvironment {
 }
 
 
-#endif // MONOLITH
