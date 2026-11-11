@@ -53,7 +53,8 @@ public final class BinaryBuffer: @unchecked Sendable {
 
     /// Read bytes at the given range.
     public func readBytes(at offset: Int, count: Int) -> Data {
-        data[offset ..< offset + count]
+        // MONOLITH: an own copy; a slice would pin the whole buffer and every later write would copy it.
+        Data(data[offset ..< offset + count])
     }
 
     // MARK: - Write Helpers
