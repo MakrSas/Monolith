@@ -11,6 +11,8 @@
 // check is VPhoneVirtualMachineCreator's, before any of this runs.
 
 import Foundation
+import VPhoneCoreKit
+import VPhoneSign
 
 enum ProcessError: Error {
     case failed(Int32, String)
@@ -23,6 +25,12 @@ extension CryptexFilesystemPatcher {
         _ arguments: [String],
         output: URL? = nil,
     ) throws -> String {
+        // MONOLITH: `codesign -f -s - BUNDLE` on a guest volume in an APFS image: sealed in-process
+        if launchPath == "/usr/bin/codesign", let last = arguments.last, let (root, relative) = Self.monolithResolve(last) {
+            try MonolithBundleSeal.seal(system: root, bundle: relative,
+                                        preserveEntitlements: arguments.contains { $0.hasPrefix("--preserve-metadata") })
+            return ""
+        }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: launchPath)
         process.arguments = arguments
@@ -46,5 +54,31 @@ extension CryptexFilesystemPatcher {
             throw ProcessError.failed(process.terminationStatus, output ?? "")
         }
         return output ?? ""
+    }
+}
+
+extension CryptexFilesystemPatcher {
+    /// MONOLITH: a path on a guest volume standing in for a mount (VPhoneConfinedDirectory.monolithMounts),
+    /// as a mount path or as an image directory's own `apfs:IMAGE#/...` path: that volume and the path in it.
+    static func monolithResolve(_ path: String) -> (VPhoneConfinedDirectory, String)? {
+        for (mount, root) in VPhoneConfinedDirectory.monolithMounts {
+            if path == mount || path.hasPrefix(mount + "/") {
+                return (root, String(path.dropFirst(mount.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/")))
+            }
+            if let base = try? root.path, path.hasPrefix(base) {
+                return (root, String(path.dropFirst(base.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/")))
+            }
+        }
+        return nil
+    }
+
+    /// MONOLITH: a Mach-O on a guest volume set to a platform and signed ad hoc again, through a host copy.
+    func monolithRetarget(_ root: VPhoneConfinedDirectory, _ relative: String, platform: UInt32) throws {
+        var data = try root.readData(relative)
+        try MachOBuildPlatform.set(platform, in: &data)
+        let file = try createTmpDir().appending(path: "payload")
+        try data.write(to: file)
+        try VPhoneSigner.sign(fileAt: file, options: .init(identifier: nil, entitlements: nil, mergesExisting: true, style: .appleAdHoc))
+        try root.replaceFile(relative, fromFileAt: file, mode: 0o755, owner: (0, 0))
     }
 }

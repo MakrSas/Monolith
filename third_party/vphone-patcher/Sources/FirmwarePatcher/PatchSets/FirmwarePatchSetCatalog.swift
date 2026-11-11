@@ -486,6 +486,20 @@ public enum FirmwarePatchSetCatalog {
         ),
     )
 
+    /// MONOLITH: ``watchOSPreset`` without the restore-image part: the stock image is restored, and
+    /// MonolithRestoredSystem makes those additions afterwards and seals the system again.
+    public static let watchOSMonolithPreset = VPhonePatchPreset(
+        identifier: "watchos-monolith",
+        title: "Apple Watch (Monolith)",
+        summary: "The watchOS preset with its system additions made after the restore, by Monolith, which seals the system again.",
+        patchSets: minimalPreset.patchSets,
+        selection: .allow(
+            minimalBootChainPatches
+                .union(watchOSDeviceTreePatches)
+                .union(FirmwareResearchBoardPatchSet.manifest.patches.map(\.identifier)),
+        ),
+    )
+
     /// Headless restore baseline. Native UI experiments remain separate choices.
     /// The headset jobs lose their panic-on-crash policy: polarisd exits at once
     /// on a VM ("Failed to register expert session") and would panic every
@@ -517,5 +531,5 @@ public enum FirmwarePatchSetCatalog {
     )
 
     /// The presets the bundle ships.
-    public static let builtInPresets: [VPhonePatchPreset] = [standardPreset, experimentalPreset, tvOSPreset, tvOS4KPreset, homeViewPreset, homePodMiniPreset, minimalPreset, watchOSPreset, visionOSPreset]
+    public static let builtInPresets: [VPhonePatchPreset] = [standardPreset, experimentalPreset, tvOSPreset, tvOS4KPreset, homeViewPreset, homePodMiniPreset, minimalPreset, watchOSPreset, watchOSMonolithPreset, visionOSPreset]
 }

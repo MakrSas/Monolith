@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Identifier</key>
+	<string>watchos-monolith</string>
+	<key>PatchSets</key>
+	<array>
+		<dict>
+			<key>Identifier</key>
+			<string>com.vphone.patchset.bootchain</string>
+			<key>Kind</key>
+			<string>Bundled</string>
+		</dict>
+		<dict>
+			<key>Identifier</key>
+			<string>com.vphone.patchset.kernel.base</string>
+			<key>Kind</key>
+			<string>Bundled</string>
+		</dict>
+		<dict>
+			<key>Identifier</key>
+			<string>com.vphone.patchset.kernel.cfw</string>
+			<key>Kind</key>
+			<string>Bundled</string>
+		</dict>
+		<dict>
+			<key>Identifier</key>
+			<string>com.vphone.patchset.research.board</string>
+			<key>Kind</key>
+			<string>Bundled</string>
+		</dict>
+		<dict>
+			<key>Identifier</key>
+			<string>com.vphone.patchset.devicetree</string>
+			<key>Kind</key>
+			<string>Bundled</string>
+		</dict>
+	</array>
+	<key>Selection</key>
+	<dict>
+		<key>Kind</key>
+		<string>Allow</string>
+		<key>Patches</key>
+		<array>
+			<string>devicetree-boot-vresearch101_conversion</string>
+			<string>devicetree-cfw-ipad_artwork</string>
+			<string>devicetree-cfw-ipad_audio</string>
+			<string>devicetree-cfw-ipad_buttons</string>
+			<string>devicetree-cfw-ipad_identity</string>
+			<string>devicetree-cfw-ipad_product</string>
+			<string>devicetree-cfw-product_audio_microphone_array</string>
+			<string>devicetree-cfw-product_haptics_node</string>
+			<string>devicetree-cfw-serial_number</string>
+			<string>devicetree-cfw-watch_driverkit</string>
+			<string>devicetree-cfw-watch_presentation</string>
+			<string>ibec-boot-boot_args</string>
+			<string>ibec-boot-bootx_precondition</string>
+			<string>ibec-boot-image4_callback</string>
+			<string>ibec-cfw-serial_label</string>
+			<string>kernel-boot-vresearch101_kext_mix</string>
+			<string>llb-boot-boot_args</string>
+			<string>llb-boot-image4_callback</string>
+			<string>llb-boot-panic_bypass</string>
+			<string>llb-boot-rootfs</string>
+			<string>llb-cfw-display_scale</string>
+			<string>llb-cfw-serial_label</string>
+			<string>sep-boot-vresearch101_sepd_dispatch</string>
+		</array>
+	</dict>
+	<key>Summary</key>
+	<string>Minimal for an Apple Watch guest: the watch board's device tree, and a resealed system with vphoned, the GPU driver, speaker audio and activation restored onto a stock kernel and TXM.</string>
+	<key>Title</key>
+	<string>Apple Watch</string>
+</dict>
+</plist>

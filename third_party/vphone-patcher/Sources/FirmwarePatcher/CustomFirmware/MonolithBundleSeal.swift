@@ -3,12 +3,12 @@
 // with VPhoneSign, Info.plist in slot 1 and the new CodeResources in slot 3. Works on any
 // VPhoneConfinedDirectory, so also on a guest volume in an APFS image.
 import CryptoKit
-import FirmwarePatcher
+
 import Foundation
 import VPhoneCoreKit
 import VPhoneSign
 
-enum MonolithBundleSeal {
+public enum MonolithBundleSeal {
     struct Unsupported: Error, CustomStringConvertible {
         let description: String
     }
@@ -52,7 +52,7 @@ enum MonolithBundleSeal {
         }
     }
 
-    static func seal(system: VPhoneConfinedDirectory, bundle: String, preserveEntitlements: Bool) throws {
+    public static func seal(system: VPhoneConfinedDirectory, bundle: String, preserveEntitlements: Bool) throws {
         let root = try system.directory(bundle)
         guard let info = try? root.readData("Info.plist"),
               let plist = try PropertyListSerialization.propertyList(from: info, format: nil) as? [String: Any],

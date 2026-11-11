@@ -158,6 +158,16 @@ extension CryptexFilesystemPatcher {
         try confined.removeItem(relative)
         let source = try VPhoneConfinedDirectory.pin(absolutePath: staged.path)
         try confined.copyTree(from: source, to: relative, owner: (0, 0))
+        if Self.monolithResolve(targetMount) != nil { // MONOLITH: the volume is in an image
+            if guestFamily == .watch {
+                for name in ["AppleParavirtGPUMetalIOGPUFamily", "libAppleParavirtCompilerPluginIOGPUFamily.dylib"] {
+                    try monolithRetarget(confined, "\(relative)/\(name)", platform: MachOBuildPlatform.watchOS)
+                }
+                try MonolithBundleSeal.seal(system: confined, bundle: relative, preserveEntitlements: false)
+                print("  [+] GPU driver retargeted to watchOS")
+            }
+            return
+        }
         // Clean AppleDouble files if the host copy created any.
         try deleteAppleDoubleFiles(under: bundle)
         if guestFamily == .watch {

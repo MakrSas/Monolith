@@ -39,6 +39,33 @@ public final class VPhoneAPFSImage: @unchecked Sendable {
         throw VPhoneConfinedDirectoryError.missing("volume \(name) in \(url.lastPathComponent)")
     }
 
+    /// A sealed volume's seal made again after writes (apfs_reseal): its new root hash. Commit after it.
+    public func reseal(volume name: String) throws -> Data {
+        lock.lock(); defer { lock.unlock() }
+        for i in 0 ..< apfs_volume_count(container) {
+            if let v = apfs_volume(container, i), String(cString: apfs_volume_name(v)) == name {
+                var hash = [UInt8](repeating: 0, count: 32)
+                guard apfs_reseal(v, &hash) == 0 else { throw failure("reseal \(name)") }
+                return Data(hash)
+            }
+        }
+        throw VPhoneConfinedDirectoryError.missing("volume \(name) in \(url.lastPathComponent)")
+    }
+
+    /// A sealed volume's root hash as its integrity metadata holds it (apfs_seal_check's recomputed one).
+    public func sealedRootHash(volume name: String) throws -> Data {
+        lock.lock(); defer { lock.unlock() }
+        for i in 0 ..< apfs_volume_count(container) {
+            if let v = apfs_volume(container, i), String(cString: apfs_volume_name(v)) == name {
+                var hash = [UInt8](repeating: 0, count: 32)
+                var bi: UInt64 = 0, bn: UInt64 = 0, ns: UInt64 = 0
+                guard apfs_seal_check(v, &hash, &bi, &bn, &ns) >= 0 else { throw failure("seal \(name)") }
+                return Data(hash)
+            }
+        }
+        throw VPhoneConfinedDirectoryError.missing("volume \(name) in \(url.lastPathComponent)")
+    }
+
     public func commit() throws {
         lock.lock(); defer { lock.unlock() }
         guard apfs_commit(container) == 0 else { throw failure("commit") }

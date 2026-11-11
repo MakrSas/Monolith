@@ -143,7 +143,15 @@ public final class VPhoneConfinedDirectory: Sendable {
     /// refusing a symbolic link anywhere in it. Pass a `realpath` result.
     /// Volume changes are allowed on the way down (the Data volume, external
     /// disks), but not below the returned directory.
+    /// MONOLITH: guest volumes (in an APFS image) standing in for mount points: a path at or below one
+    /// resolves into that volume, so code written for a mounted volume works on the image.
+    nonisolated(unsafe) public static var monolithMounts: [String: VPhoneConfinedDirectory] = [:]
+
     public static func pin(absolutePath: String, requireOwner owner: uid_t? = nil) throws -> VPhoneConfinedDirectory {
+        for (mount, root) in monolithMounts where absolutePath == mount || absolutePath.hasPrefix(mount + "/") { // MONOLITH
+            let rest = String(absolutePath.dropFirst(mount.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            return rest.isEmpty ? root : try root.directory(rest)
+        }
         guard absolutePath.hasPrefix("/"), !absolutePath.contains("\0") else {
             throw VPhoneConfinedDirectoryError.invalidPath(absolutePath)
         }

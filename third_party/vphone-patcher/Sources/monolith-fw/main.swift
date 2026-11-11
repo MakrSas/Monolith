@@ -14,6 +14,13 @@ let args = CommandLine.arguments
 func command(_ body: () throws -> Void) -> Never {
     do { try body(); print("done"); exit(0) } catch { print("error:", error); exit(1) }
 }
+/// monolith-fw restored-system VM RESOURCES: vphone's restore-image additions written into the restored System, sealed again.
+if args.count >= 4, args[1] == "restored-system" {
+    command {
+        VPhoneResources.monolithBase = URL(fileURLWithPath: args[3])
+        try MonolithRestoredSystem.install(vm: URL(fileURLWithPath: args[2]))
+    }
+}
 /// monolith-fw aea-key FILE.aea: the image's symmetric key (fetched as vphone does), for `aea decrypt -key-value`.
 if args.count >= 3, args[1] == "aea-key" {
     command {

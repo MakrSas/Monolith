@@ -26,6 +26,20 @@ extension CryptexFilesystemPatcher {
         try confined.removeItem(relative)
         try confined.copyTree(from: source, to: relative, owner: (0, 0))
 
+        if Self.monolithResolve(targetMount) != nil { // MONOLITH: the volume is in an image
+            try monolithRetarget(confined, "\(relative)/VPhoneVirtIOSound", platform: MachOBuildPlatform.watchOS)
+            guard var info = try PropertyListSerialization.propertyList(from: confined.readData("\(relative)/Info.plist"), format: nil) as? [String: Any] else {
+                throw VPhonePatchKit.PatcherError.patchVerificationFailed("The virtio sound driver has no valid bundle metadata.")
+            }
+            info["CFBundleSupportedPlatforms"] = ["WatchOS"]
+            try confined.writeFile("\(relative)/Info.plist", contents: PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0),
+                                   mode: 0o644, owner: (0, 0))
+            try MonolithBundleSeal.seal(system: confined, bundle: relative, preserveEntitlements: false)
+            print("  [+] /\(relative)")
+            try patchWatchAudioGraphs(targetMount: targetMount)
+            try patchWatchAudioRoutingGates(targetMount: targetMount)
+            return
+        }
         let bundle = URL(filePath: targetMount).appending(path: relative)
         try deleteAppleDoubleFiles(under: bundle)
 
