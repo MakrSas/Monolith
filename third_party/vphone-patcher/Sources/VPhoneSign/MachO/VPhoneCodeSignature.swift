@@ -42,6 +42,8 @@ struct VPhoneCodeSignature {
     var entitlements: (xml: Data, der: Data)?
     /// `__TEXT,__info_plist`, hashed into slot 1 of whatever carries one.
     var infoPlist: Data?
+    /// MONOLITH: a bundle's `_CodeSignature/CodeResources`, hashed into slot 3 as codesign does for a bundle.
+    var resourceDirectory: Data?
     var executableSegmentFlags: UInt64 = 0
     /// `CodeDirectory.flags`. ldid leaves it at 0; an Apple ad-hoc signature
     /// sets `kSecCodeSignatureAdhoc`.
@@ -94,7 +96,7 @@ struct VPhoneCodeSignature {
     /// The highest slot anything is hashed into, which is how many special
     /// slots each CodeDirectory carries.
     private var specialSlots: Int {
-        entitlements == nil ? 2 : 7
+        max(entitlements == nil ? 2 : 7, resourceDirectory == nil ? 0 : 3)
     }
 
     // MARK: Writing
@@ -197,7 +199,7 @@ struct VPhoneCodeSignature {
         // nearest them, the highest slot first. Whatever is in no slot stays
         // zero, which is how ldid leaves 3, 4 and 6.
         for slot in (1 ... special).reversed() {
-            let hashed = slot == 1 ? infoPlist : blobs.first { $0.slot == UInt32(slot) }?.bytes
+            let hashed = slot == 1 ? infoPlist : slot == 3 ? resourceDirectory : blobs.first { $0.slot == UInt32(slot) }?.bytes
             directory.append(hashed.map(digest.hash) ?? Data(count: digest.size))
         }
         for start in stride(from: 0, to: codeLimit, by: Self.pageSize) {

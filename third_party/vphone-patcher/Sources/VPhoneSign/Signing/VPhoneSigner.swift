@@ -42,6 +42,10 @@ public struct VPhoneSignOptions {
     public var style = Style.ldid
     /// `-K`: sign for real rather than ad-hoc.
     public var identity: (any VPhoneSigningIdentity)?
+    /// MONOLITH: signing a bundle's main executable as codesign does: the bundle's Info.plist in slot 1
+    /// and its `_CodeSignature/CodeResources` in slot 3.
+    public var bundleInfoPlist: Data?
+    public var bundleResources: Data?
 
     public init(
         identifier: String? = nil,
@@ -169,7 +173,8 @@ public enum VPhoneSigner {
     ) throws -> VPhoneCodeSignature {
         var signature = VPhoneCodeSignature(identifier: identifier)
         signature.digests = digests
-        signature.infoPlist = slice.infoPlist
+        signature.infoPlist = options.bundleInfoPlist ?? slice.infoPlist
+        signature.resourceDirectory = options.bundleResources
 
         let mainBinary = slice.fileType == UInt32(MH_EXECUTE)
         switch options.style {

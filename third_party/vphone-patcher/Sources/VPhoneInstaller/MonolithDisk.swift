@@ -64,6 +64,44 @@ final class MonolithDisk: @unchecked Sendable {
         }
     }
 
+    /// A directory of a guest volume as plain files in the host's work folder, for code that opens them
+    /// by path; writeBack() puts every file it changed (by modification time) back.
+    struct Materialized {
+        let url: URL
+        let source: VPhoneConfinedDirectory
+        let stamps: [String: Date]
+
+        func writeBack() throws {
+            var written = 0
+            for name in try FileManager.default.contentsOfDirectory(atPath: url.path) {
+                let file = url.appendingPathComponent(name)
+                let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+                guard (attributes[.type] as? FileAttributeType) == .typeRegular else { continue }
+                if let stamp = stamps[name], let now = attributes[.modificationDate] as? Date, now == stamp { continue }
+                let mode = (try source.status(name)).map { $0.st_mode & 0o7777 } ?? 0o644
+                let owner = (try source.status(name)).map { ($0.st_uid, $0.st_gid) } ?? (0, 0)
+                try source.writeFile(name, contents: Data(contentsOf: file, options: .alwaysMapped), mode: mode, owner: owner)
+                written += 1
+            }
+            try? FileManager.default.removeItem(at: url)
+            if written > 0 { print("[monolith] \(written) changed file(s) written back from \(url.lastPathComponent)") }
+        }
+    }
+
+    static func materialize(_ source: VPhoneConfinedDirectory, into url: URL) throws -> Materialized {
+        try? FileManager.default.removeItem(at: url)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        var stamps: [String: Date] = [:]
+        for name in try source.entries() {
+            guard let s = try source.status(name), s.st_mode & S_IFMT == S_IFREG else { continue }
+            let file = url.appendingPathComponent(name)
+            try source.readData(name).write(to: file)
+            chmod(file.path, s.st_mode & 0o7777 | 0o600)
+            stamps[name] = try FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as? Date
+        }
+        return Materialized(url: url, source: source, stamps: stamps)
+    }
+
     /// A "mounted" volume's root, by its mount point's name (system, xart, preboot).
     func volume(mountedAs name: String) throws -> VPhoneConfinedDirectory? {
         guard enabled else { return nil }

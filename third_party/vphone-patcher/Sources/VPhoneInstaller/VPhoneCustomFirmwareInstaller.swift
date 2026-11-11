@@ -1581,7 +1581,15 @@ public struct VPhoneCustomFirmwareInstaller {
         // intact; cryptex symlinks would point into images it does not ship.
         let cacheRelative = guestDevice.dyldSharedCacheDirectory
         let cacheArchitecture = guestDevice.hasPlainArm64Userland ? "arm64" : "arm64e"
-        let dsc = try verifiedDyldCacheDirectory(system: system, relative: cacheRelative)
+        var dsc = try verifiedDyldCacheDirectory(system: system, relative: cacheRelative)
+        // MONOLITH: the cache patches open its files by path. With no mounted volume they get a copy
+        // in the work folder, and what they changed goes back into the image when this step ends.
+        var cacheCopy: MonolithDisk.Materialized?
+        if MonolithDisk.shared.enabled {
+            cacheCopy = try MonolithDisk.materialize(system.directory(cacheRelative), into: work.file("dyld-cache"))
+            dsc = cacheCopy!.url.path
+        }
+        defer { if let cacheCopy { do { try cacheCopy.writeBack() } catch { print("  [!] dyld cache write-back: \(error)") } } }
         let widenedRegion = kernelPatches.map { $0.contains("kernel-boot-shared_region_size") }
             ?? version.hasPrefix("27.")
         let kernelRegionSize = widenedRegion
@@ -2342,11 +2350,17 @@ public struct VPhoneCustomFirmwareInstaller {
             var data = try Data(contentsOf: work.file(stagedName))
             if try CustomFirmwareGLESDepthConfiguration.configure(&data, enabled: on(depthClip)) {
                 try data.write(to: work.file(stagedName))
+                if MonolithDisk.shared.enabled { // MONOLITH: no codesign
+                    let signed = try VPhoneSigner.sign(try Data(contentsOf: work.file(stagedName)),
+                                                       options: VPhoneSignOptions(identifier: "libAppleParavirtCompilerPluginIOGPUFamily", style: .appleAdHoc))
+                    try signed.write(to: work.file(stagedName))
+                } else {
                 _ = try tool("/usr/bin/codesign", [
                     "-f", "-s", "-", "--timestamp=none",
                     "--identifier", "libAppleParavirtCompilerPluginIOGPUFamily",
                     work.file(stagedName).path,
                 ])
+                }
                 try system.replaceFile(plugin, fromFileAt: work.file(stagedName), mode: 0o755, owner: Self.guestOwner)
                 try sealGuestBundle(system: system, bundle: gpu)
             }
@@ -4725,6 +4739,9 @@ public struct VPhoneCustomFirmwareInstaller {
     /// plugin still answers to the name it always had.
     private func sealGuestBundle(system: VPhoneConfinedDirectory, bundle: String, preserveEntitlements: Bool = false) throws {
         try detachSharedFiles(system: system, bundle: bundle)
+        if MonolithDisk.shared.enabled { // MONOLITH: no codesign
+            return try MonolithBundleSeal.seal(system: system, bundle: bundle, preserveEntitlements: preserveEntitlements)
+        }
         // No --identifier: codesign keeps the one the bundle already carries.
         var arguments = ["-f", "-s", "-", "--timestamp=none"]
         if preserveEntitlements { arguments.append("--preserve-metadata=entitlements") }
