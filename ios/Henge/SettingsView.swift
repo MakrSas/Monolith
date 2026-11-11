@@ -15,6 +15,9 @@ struct SettingsView: View {
     @AppStorage(EngineTuning.wfiSpinKey) private var wfiSpin = false
     @AppStorage(EngineTuning.superblocksKey) private var superblocks = false
     @AppStorage(JITBootstrap.codeCacheKey) private var codeCacheMB = JITBootstrap.defaultCodeCacheMB
+    @AppStorage(DeskAppearance.key) private var appearance = DeskAppearance.system
+    @AppStorage(InstantResume.key) private var instantResume = false
+    @AppStorage(MacAppsFeature.key) private var macApps = false
 
     /// The second footer paragraph: how you click, given the selected input mode.
     private var inputDescription: String {
@@ -111,10 +114,11 @@ struct SettingsView: View {
                     Toggle("Quicker wake from idle", isOn: $wfiSpin)
                     Toggle("Superblocks (experimental)", isOn: $superblocks)
                     Picker("Code cache", selection: $codeCacheMB) {
+                        Text("512 MB").tag(512)
                         Text("1 GB").tag(1024)
                         Text("1.5 GB").tag(1536)
                     }
-                    Text("A bigger code cache empties less often and takes more memory; Monolith picks 1.5 GB where there is room for it. Applies the next time Monolith opens. If JIT stops turning on, choose 1 GB.")
+                    Text("A bigger code cache empties less often and takes more memory (about 1.75 times its size); Monolith picks one by its memory limit: 1.5 GB where there is plenty, 512 MB where there is little. Applies the next time Henge opens. If JIT stops turning on, or a Mac closes Henge during setup, choose a smaller one.")
                         .font(.footnote).foregroundStyle(.secondary)
                     Text("macOS draws a frame for every refresh: 30 Hz leaves the most of the emulated CPU to apps, at the cost of choppier animation; 60 Hz is smoother. Faster disk writes order them without waiting for a full sync; a sudden power loss could lose the last ones. Quicker wake keeps an idle CPU watching for work for 50 µs, at some battery cost. Superblocks let translated code run past conditional branches. Changes apply the next time a device starts.")
                         .font(.footnote).foregroundStyle(.secondary)
@@ -122,6 +126,27 @@ struct SettingsView: View {
                 .listRowBackground(Desk.card)
                 Section("Storage") {
                     NavigationLink { StorageView() } label: { Label("Files and machines", systemImage: "internaldrive") }
+                }
+                .listRowBackground(Desk.card)
+                Section("Instant Resume") {
+                    Toggle("Resume where you left off", isOn: $instantResume)
+                    Text("When you leave Monolith, the running Mac is saved to storage, and opening it again picks up where it was in a few seconds, even after iOS closes Monolith. The save is about the size of the Mac's memory in use, compressed. The Mac pauses while Monolith is in the background, so its sound stops. Experimental.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                .listRowBackground(Desk.card)
+                Section("Mac Apps") {
+                    Toggle("Mac apps without macOS", isOn: $macApps)
+                    Text("Bring in a .dmg or an .app (the + button on Home) and run it inside Monolith through its own translation layer, without starting a Mac. Programs without windows run today; apps with windows don't yet. Experimental.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                .listRowBackground(Desk.card)
+                Section("Appearance") {
+                    Picker("Appearance", selection: $appearance) {
+                        ForEach(DeskAppearance.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Text("System follows the \(Device.name)'s Light or Dark setting. Monolith stays dark while a Mac is running.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
                 .listRowBackground(Desk.card)
                 Section("Log") {
