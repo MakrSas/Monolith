@@ -93,6 +93,7 @@ struct SessionView: View {
                             .position(x: layout.screen.midX, y: layout.screen.midY)
                     } else if mac.isResearch {
                         TouchScreen()
+                            .task { await GuestAgent.skipSetupWhenUp() }
                             .frame(width: layout.screen.width, height: layout.screen.height)
                             .position(x: layout.screen.midX, y: layout.screen.midY)
                     } else {

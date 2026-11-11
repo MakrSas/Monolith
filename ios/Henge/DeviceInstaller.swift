@@ -16,6 +16,8 @@ struct GuestKind: Identifiable, Hashable {
     let ramMB: Int
     let note: String?       // why it is not offered yet, or what to expect
     var available: Bool { note == nil || !note!.hasPrefix("Not yet") }
+    /// A stock kernel checks the system's seal: customised after the restore and sealed again.
+    var sealsAfterRestore: Bool { preset == "watchos-monolith" }
 
     static let all: [GuestKind] = [
         GuestKind(id: "AudioAccessory5,1", title: "HomePod mini", symbol: "homepodmini", preset: "homepod-mini", ramMB: 2048, note: nil),
@@ -25,8 +27,8 @@ struct GuestKind: Identifiable, Hashable {
                   note: "Installed the HomePod's way (restore, then vphone's installer); not tried yet."),
         GuestKind(id: "iPhone17,3", title: "iPhone", symbol: "iphone", preset: "standard", ramMB: 4096,
                   note: "Not yet: its GPU driver comes from a cloudOS restore Monolith cannot do yet."),
-        GuestKind(id: "Watch7,18", title: "Apple Watch", symbol: "applewatch", preset: "watchos", ramMB: 2048,
-                  note: "Not yet: vphone builds the watch's system image before the restore, which needs mounting and resealing."),
+        GuestKind(id: "Watch7,18", title: "Apple Watch", symbol: "applewatch", preset: "watchos-monolith", ramMB: 2048,
+                  note: "New: its system is customised after the restore and sealed again by Monolith; not tried on a phone yet."),
     ]
 }
 
@@ -140,6 +142,27 @@ final class DeviceInstaller: ObservableObject {
         // 1. vphone's machine, its patch preset, and the firmware: downloaded, merged, prepared.
         let watcher = Task { await watchDownload(pairing, cache: root.appendingPathComponent("ipsws", isDirectory: true)) }
         defer { watcher.cancel() }
+        // vphone's GPU driver recovery: cloudOS restored in a temporary machine of this one's ROMs.
+        VPhonePCCGPURecovery.restorer = { [weak self] tree, work in
+            guard let self else { throw NSError(domain: "Henge", code: 3) }
+            let fm = FileManager.default
+            for name in ["OpenAVB.bin", "OpenSEP.bin"] {
+                try fm.copyItem(at: vm.appendingPathComponent(name), to: work.appendingPathComponent(name))
+            }
+            try Data(count: 512 << 10).write(to: work.appendingPathComponent("SEPStorage"))
+            let temp = VirtualMac(name: "cloudOS (GPU driver)", ecid: UInt64.random(in: 1 << 40 ..< 1 << 62), seed: 0,
+                                  ramMB: 2048, diskBytes: 64 << 30)
+            let done = DispatchSemaphore(value: 0)
+            var failure: Error?
+            Task { @MainActor in
+                do { try await self.restore(vm: work, tree: tree, mac: temp, cpus: cpus) } catch { failure = error }
+                done.signal()
+            }
+            done.wait()
+            if let failure { throw failure }
+            return work.appendingPathComponent("Disk.img")
+        }
+        defer { VPhonePCCGPURecovery.restorer = nil }
         try await off {
             let bundle = try VPhoneBundleOperations.create(.init(
                 name: slug, cpuCount: UInt(cpus), memoryMB: UInt64(kind.ramMB), diskSizeGB: 64,
@@ -171,7 +194,12 @@ final class DeviceInstaller: ObservableObject {
         stepProgress = 0
         try await off {
             let tmp = realpath(NSTemporaryDirectory(), nil).map { String(cString: $0) } ?? NSTemporaryDirectory()
-            try MonolithCustomFirmware.install(bundle: vm, resources: resources, workParent: tmp)
+            if kind.sealsAfterRestore {
+                // a stock kernel checks the seal: the additions are written, then the system is sealed again
+                try MonolithRestoredSystem.install(vm: vm)
+            } else {
+                try MonolithCustomFirmware.install(bundle: vm, resources: resources, workParent: tmp)
+            }
         }
 
         // 5. Monolith's own machine: the same files under its names.

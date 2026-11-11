@@ -252,15 +252,43 @@ enum VPhonePCCGPURecovery {
 import Foundation
 import VPhoneCoreKit
 
-/// MONOLITH: the iOS guests' GPU driver comes from a restored cloudOS VM in vphone. Not available here
-/// yet; guests that need no GPU bundle (HomePod, watch) do not get here.
-enum VPhonePCCGPURecovery {
+/// MONOLITH: vphone restores cloudOS in a temporary VM to read its GPU driver. Here the app does that
+/// restore (`restorer`: a restore tree and a work folder in, the restored Disk.img out), and the driver is
+/// copied out of the image's System volume with Monolith's own APFS code.
+public enum VPhonePCCGPURecovery {
     struct Unavailable: Error, CustomStringConvertible {
-        var description: String { "recovering the GPU driver from cloudOS is not available in Monolith yet" }
+        var description: String { "recovering the GPU driver from cloudOS is not available in this build" }
     }
 
+    nonisolated(unsafe) public static var restorer: ((_ tree: URL, _ work: URL) throws -> URL)?
+
     static func stage(cloudOSDirectory: URL, into restoreDirectory: URL, expectedPlatformVersion: String) throws {
-        throw Unavailable()
+        guard let restorer else { throw Unavailable() }
+        let fm = FileManager.default
+        let work = restoreDirectory.deletingLastPathComponent().appending(path: ".pcc-restoration-\(UUID().uuidString)")
+        try fm.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: work) }
+        let tree = work.appending(path: "iPhonePCC_Restore")
+        try fm.moveItem(at: cloudOSDirectory, to: tree)
+        try acceptVirtualDevice(manifest: tree.appending(path: "BuildManifest.plist"))
+        print("[*] Restoring cloudOS in a temporary VM for its GPU driver...")
+        let disk = try restorer(tree, work)
+        let image = try VPhoneAPFSImage(disk, writable: false)
+        let source = try image.volume(named: "System").directory("System/Library/Extensions/\(VPhonePCCGPUDriver.name)")
+        let host = work.appending(path: VPhonePCCGPUDriver.name)
+        try VPhoneConfinedDirectory(root: work.path).copyTree(from: source, to: VPhonePCCGPUDriver.name, clearSetID: true)
+        try VPhonePCCGPUDriver.stage(from: host, into: restoreDirectory, expectedPlatformVersion: expectedPlatformVersion)
+        print("[+] GPU driver taken from the restored cloudOS")
+    }
+
+    /// As vphone's: the temporary VM reports iPhone99,11, which later cloudOS manifests leave out.
+    static func acceptVirtualDevice(manifest url: URL) throws {
+        let productType = "iPhone99,11"
+        guard var manifest = try PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: Any] else { return }
+        let types = manifest["SupportedProductTypes"] as? [String] ?? []
+        guard !types.contains(productType) else { return }
+        manifest["SupportedProductTypes"] = types + [productType]
+        try PropertyListSerialization.data(fromPropertyList: manifest, format: .xml, options: 0).write(to: url, options: .atomic)
     }
 }
 #endif

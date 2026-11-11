@@ -40,6 +40,23 @@ enum GuestAgent {
         return json["result"] as? [String: Any]
     }
 
+    /// Once a research guest starts: when its agent answers, its first-start setup (a watch's pairing
+    /// with an iPhone, a TV's or HomeView's setup) is skipped if it has not been done, as vphone does.
+    static func skipSetupWhenUp() async {
+        connect()
+        for _ in 0 ..< 180 { // up to 15 minutes: a watch's first start is long
+            if Task.isCancelled { return }
+            if let status = await rpc("setup.status", timeout: 10) {
+                let done = (status["setup_done"] as? Bool) ?? false
+                if done { HengeLog.log("agent", "setup already done"); return }
+                let r = await rpc("setup.skip", ["force": true], timeout: 60)
+                HengeLog.log("agent", "setup skipped: \(r.map { "\($0)" } ?? "no answer")")
+                if r != nil { return }
+            }
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+        }
+    }
+
     /// Is the agent up (the guest has booted far enough)?
     static func ready() async -> Bool {
         var request = URLRequest(url: base.appendingPathComponent("v1/apps/foreground"))
