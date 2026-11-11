@@ -64,7 +64,7 @@ struct ApfsVolume {
     uint64_t sb_paddr, next_obj_id, extentref_root, snap_xid_max;
     int64_t files_added, dirs_added, symlinks_added;
     int64_t alloced;
-    int sb_dirty, counted;
+    int sb_dirty, counted, fs_written;
 };
 
 struct ApfsContainer {

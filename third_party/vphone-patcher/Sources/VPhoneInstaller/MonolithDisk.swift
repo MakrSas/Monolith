@@ -18,6 +18,13 @@ final class MonolithDisk: @unchecked Sendable {
     }()
 
     private var image: VPhoneAPFSImage?
+    /// A step that cannot throw (a defer) failed: eject then refuses to write the image.
+    private var failure: String?
+
+    func fail(_ what: String) {
+        failure = failure ?? what
+        print("  [!] \(what)")
+    }
     private var mounted: [String: Int] = [:] // mount point's name -> volume index
     private let whole = "/dev/disk90", container = "disk91"
 
@@ -52,6 +59,12 @@ final class MonolithDisk: @unchecked Sendable {
         case ("umount", _), ("diskutil", "unmountDisk"):
             return ""
         case ("diskutil", "eject"):
+            if let failure, image != nil {
+                image = nil
+                mounted = [:]
+                self.failure = nil
+                throw self.failure(failure + "; the image was not written")
+            }
             if let image {
                 try image.commit()
                 print("[monolith] \(image.url.lastPathComponent): changes written")

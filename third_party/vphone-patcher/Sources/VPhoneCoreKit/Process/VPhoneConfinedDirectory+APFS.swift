@@ -227,4 +227,14 @@ extension VPhoneConfinedDirectory {
             }
         }
     }
+
+    /// MONOLITH: another name for a file (a hard link), for APFS-image directories.
+    public func apfsHardLink(_ source: String, to destination: String) throws {
+        guard let node = apfs else { throw VPhoneConfinedDirectoryError.system(source, ENOTSUP) }
+        node.image.lock.lock(); defer { node.image.lock.unlock() }
+        let from = try leaf(node, source), to = try leaf(node, destination)
+        guard let e = from.entry, e.type == Self.typeFile else { throw VPhoneConfinedDirectoryError.notRegularFile(source) }
+        guard to.entry == nil else { throw VPhoneConfinedDirectoryError.system(destination, EEXIST) }
+        guard apfs_link(node.volume, e.id, to.dir.id, to.name) == 0 else { throw fail(node, "link \(destination)") }
+    }
 }

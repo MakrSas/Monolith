@@ -723,6 +723,10 @@ public enum VPhoneOTAArchive {
     @discardableResult
     public static func installHardLinks(_ data: Data, in directory: VPhoneConfinedDirectory) throws -> Int {
         let links = try parseHardLinks(data)
+        if directory.apfs != nil { // MONOLITH: links inside an APFS image
+            for link in links { try directory.apfsHardLink(link.source, to: link.destination) }
+            return links.count
+        }
         for link in links {
             // One confined walk per side; the source and the readback use
             // the parents already pinned.

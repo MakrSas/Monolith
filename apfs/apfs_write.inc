@@ -117,6 +117,27 @@ static int cib_addrs(ApfsContainer *c, uint64_t **out, uint32_t *count) {
     return 0;
 }
 
+/* A block of the space manager's internal pool (where chunk bitmaps live): spaceman ip_block_count @152,
+   ip_bm_size_in_blocks @160, ip_bm_base @168, ip_base @176, and at ip_bitmap_offset (@328) the u16 index of
+   each block of the pool's current bitmap, counted from ip_bm_base. */
+static int alloc_ip_block(ApfsContainer *c, uint64_t *paddr) {
+    uint8_t *sm = spaceman(c);
+    if (!sm) return werr(c, "cannot read the space manager");
+    uint64_t count = rd64(sm + 152), bm_base = rd64(sm + 168), ip_base = rd64(sm + 176);
+    uint32_t pieces = rd32(sm + 160), off = rd32(sm + 328), per = c->bs * 8;
+    for (uint32_t p = 0; p < pieces; p++) {
+        uint8_t *bm = cache_get(c, bm_base + rd16(sm + off + 2 * p), 1, 1, KIND_RAW);
+        if (!bm) return werr(c, "cannot read the internal pool's bitmap");
+        for (uint32_t k = 0; k < per && (uint64_t)p * per + k < count; k++) {
+            if (bm[k / 8] & (1 << (k % 8))) continue;
+            bm[k / 8] |= (uint8_t)(1 << (k % 8));
+            *paddr = ip_base + (uint64_t)p * per + k;
+            return 0;
+        }
+    }
+    return werr(c, "the space manager's internal pool is full");
+}
+
 /* Up to want contiguous free blocks (at least one): *got of them from *start. */
 static int alloc_run(ApfsContainer *c, uint64_t want, uint64_t *start, uint64_t *got) {
     uint64_t *cibs;
@@ -131,7 +152,14 @@ static int alloc_run(ApfsContainer *c, uint64_t want, uint64_t *start, uint64_t 
                 const uint8_t *ci = cibb + 40 + 32 * j;
                 uint32_t blocks = rd32(ci + 16) & 0xfffff, free_ = rd32(ci + 20);
                 uint64_t addr = rd64(ci + 8), bitmap = rd64(ci + 24);
-                if (!free_ || !bitmap || (pass == 0 && free_ < want)) continue;
+                if (!free_ || (pass == 0 && free_ < want)) continue;
+                if (!bitmap) { /* an untouched chunk, all free, has no bitmap yet: it gets one from the pool */
+                    if (free_ != blocks || alloc_ip_block(c, &bitmap)) continue;
+                    uint8_t *nb = cache_get(c, bitmap, 1, 0, KIND_RAW);
+                    memset(nb, 0, c->bs);
+                    uint8_t *cibw = cache_get(c, cibs[i], 1, 1, KIND_OBJECT);
+                    wr64(cibw + 40 + 32 * j + 24, bitmap);
+                }
                 uint8_t *bm = cache_get(c, bitmap, 1, 1, KIND_RAW);
                 if (!bm) continue;
                 /* the longest run here, up to want */
@@ -515,7 +543,7 @@ static int winsert_at(WTree *t, uint64_t oid, int root, const uint8_t *k, uint16
         uint32_t at = 0;
         while (at < m.n && t->cmp(m.e[at].k, m.e[at].kl, k, kl, t->v) < 0) at++;
         if (at < m.n && t->cmp(m.e[at].k, m.e[at].kl, k, kl, t->v) == 0) {
-            if (!replace) { img_free(&m); return werr(c, "the record exists"); }
+            if (!replace) { img_free(&m); return werr(c, "the record exists (id %llu type %u)", (unsigned long long)(rd64(k) & OBJ_ID_MASK), (unsigned)(rd64(k) >> OBJ_TYPE_SHIFT)); }
             img_del(&m, at);
         } else {
             *added = 1;
@@ -523,6 +551,7 @@ static int winsert_at(WTree *t, uint64_t oid, int root, const uint8_t *k, uint16
         img_add(&m, at, k, kl, v, vl);
         r = wstore(t, oid, &m, root, split_k, split_kl, split_oid);
     } else {
+        if (!m.n) { img_free(&m); return werr(c, "an empty index node"); }
         uint32_t at = pick_child(t, &m, k, kl);
         uint8_t ck[1024]; uint16_t ckl = 0; uint64_t coid = 0;
         r = winsert_at(t, child_of(t, &m.e[at]), 0, k, kl, v, vl, replace, ck, &ckl, &coid, added);
@@ -596,6 +625,10 @@ static int wdelete_at(WTree *t, uint64_t oid, int root, const uint8_t *from, uin
         }
     }
     *empty = !root && m.n == 0;
+    if (root && m.level && m.n == 0) { /* every record is gone: the root is an empty leaf again */
+        m.level = 0;
+        changed = 1;
+    }
     *first_kl = 0;
     if (m.n) { memcpy(first_k, m.e[0].k, m.e[0].kl); *first_kl = m.e[0].kl; }
     if (!r && changed && !*empty) r = wstore(t, oid, &m, root, split_k, split_kl, split_oid);
@@ -637,13 +670,30 @@ int apfs_commit(ApfsContainer *c) {
             if (pwrite(c->fd, e->b, len, (off_t)(c->base + e->paddr * c->bs)) != (ssize_t)len) return werr(c, "write failed");
             e->dirty = 0;
         }
+    /* a sealed volume written to: its seal is broken (integrity_meta_phys_t: im_flags @36 |=
+       APFS_SEAL_BROKEN, im_broken_xid @48), as the macOS kernel marks it, so a guest kernel that allows a
+       broken seal stops checking the tree's hashes instead of refusing the volume */
+    for (int i = 0; i < c->nvol; i++) {
+        ApfsVolume *v = &c->vol[i];
+        if (!v->fs_written || !(v->incompat & APFS_INCOMPAT_SEALED_VOLUME)) continue;
+        uint8_t sb[65536];
+        uint64_t im = 0, p;
+        if (!read_block(c, v->sb_paddr, sb)) im = rd64(sb + 1024);
+        if (!im || omap_lookup(c, v->omap_root, im, c->xid, &p)) continue;
+        uint8_t *b = cache_get(c, p, 1, 1, KIND_OBJECT);
+        if (!b) continue;
+        if (!(rd32(b + 36) & 1)) { wr32(b + 36, rd32(b + 36) | 1); wr64(b + 48, c->xid); }
+        if (pwrite(c->fd, (wr64(b, fletcher64(b, c->bs)), b), c->bs, (off_t)(c->base + p * c->bs)) != (ssize_t)c->bs) return werr(c, "write failed");
+        if (debug_on()) fprintf(stderr, "apfs: %s: seal marked broken\n", v->name);
+    }
     /* volumes' counters */
     for (int i = 0; i < c->nvol; i++) {
         ApfsVolume *v = &c->vol[i];
-        if (!v->alloced && !v->sb_dirty && !v->files_added && !v->dirs_added && !v->symlinks_added && !v->counted) continue;
-        v->counted = 0;
         uint8_t *sb = malloc(c->bs);
         if (pread(c->fd, sb, c->bs, (off_t)(c->base + v->sb_paddr * c->bs)) != (ssize_t)c->bs) { free(sb); return werr(c, "volume superblock"); }
+        if (!v->alloced && !v->sb_dirty && !v->files_added && !v->dirs_added && !v->symlinks_added && !v->counted &&
+            rd64(sb + 176) == v->next_obj_id) { free(sb); continue; }
+        v->counted = 0;
         wr64(sb + 88, rd64(sb + 88) + v->alloced);      /* fs_alloc_count */
         wr64(sb + 176, v->next_obj_id);                 /* next_obj_id */
         wr64(sb + 184, rd64(sb + 184) + v->files_added);
@@ -744,6 +794,7 @@ static int name_hash(ApfsVolume *v, const char *name, uint32_t *hash) {
 }
 
 static WTree fs_wtree(ApfsVolume *v) {
+    v->fs_written = 1;
     uint8_t b[65536];
     Tree rt = {v->c, v->root_tree, !v->root_physical, v->omap_root, 0, 0, NULL, NULL, 0};
     uint16_t flags = tree_node(&rt, v->root_tree, b) ? 0 : rd16(b + 32);
@@ -1067,9 +1118,12 @@ int apfs_write_file(ApfsVolume *v, uint64_t parent, const char *name, const uint
         RawFind rf;
         if (inode_raw(v, id, &rf)) return werr(v->c, "no inode for %s", name);
         uint64_t stream = rd64(rf.v + 8);
-        /* the old contents go: their extents, references and (unless a snapshot keeps them) blocks */
+        /* the new contents first, in a stream of their own: a failure leaves the old file as it was */
+        uint64_t fresh = v->next_obj_id++;
+        if (write_stream(v, fresh, data, len, &alloced) || stream_id_put(v, fresh, len)) return -1;
+        /* then the old contents go: their extents, references and (unless a snapshot keeps them) blocks,
+           and a resource fork kept as its own stream */
         if (drop_stream(v, stream)) return -1;
-        /* a resource fork kept as its own stream: that stream goes too */
         RawXattr rx = {"com.apple.ResourceFork", 0, 0, 0};
         fs_records(v, id, APFS_TYPE_XATTR, rawx_cb, &rx);
         if (rx.found && (rx.flags & XATTR_DATA_STREAM) && drop_stream(v, rx.stream)) return -1;
@@ -1078,8 +1132,8 @@ int apfs_write_file(ApfsVolume *v, uint64_t parent, const char *name, const uint
         uint8_t xk[12];
         wr64(xk, id | (uint64_t)APFS_TYPE_XATTR << OBJ_TYPE_SHIFT); wr16(xk + 8, 0); xk[10] = 0;
         if (wdelete(&t, xk, 11, match_xattr_name, names) < 0) return -1;
-        if (write_stream(v, id, data, len, &alloced) || stream_id_put(v, id, len)) return -1;
         uint16_t vl = inode_val(val, parent, id, (uint16_t)(0100000 | (mode & 07777)), uid, gid, (int32_t)rd32(rf.v + 56), 1, len, alloced, name);
+        wr64(val + 8, fresh); /* private_id: the new stream */
         wr64(val + 16, rd64(rf.v + 16)); /* keep the creation time */
         return inode_put(v, val, vl, id, 1);
     }
@@ -1286,4 +1340,58 @@ int apfs_list(ApfsVolume *v, uint64_t dir, ApfsDirEntry **out, size_t *count) {
     *out = a.e;
     *count = a.n;
     return 0;
+}
+
+/* ---- hard links ----
+   A file with more than one name keeps a sibling link per name: key {inode | SIBLING_LINK, sibling_id},
+   value {parent_id, name_len u16, name}, and a sibling map {sibling_id | SIBLING_MAP} -> {file_id}. The
+   directory records name the inode itself. */
+
+static int sibling_put(ApfsVolume *v, uint64_t inode, uint64_t parent, const char *name) {
+    uint64_t sib = v->next_obj_id++;
+    size_t n = strlen(name) + 1;
+    uint8_t k[16], val[300], mk[8], mv[8];
+    wr64(k, inode | (uint64_t)5 << OBJ_TYPE_SHIFT);
+    wr64(k + 8, sib);
+    wr64(val, parent);
+    wr16(val + 8, (uint16_t)n);
+    memcpy(val + 10, name, n);
+    wr64(mk, sib | (uint64_t)12 << OBJ_TYPE_SHIFT);
+    wr64(mv, inode);
+    WTree t = fs_wtree(v);
+    if (winsert(&t, k, 16, val, (uint16_t)(10 + n), 0)) return -1;
+    t = fs_wtree(v);
+    return winsert(&t, mk, 8, mv, 8, 0);
+}
+
+typedef struct { int found; } AnySibling;
+
+static int any_sibling_cb(const uint8_t *k, uint16_t kl, const uint8_t *v, uint16_t vl, void *user) {
+    (void)k; (void)kl; (void)v; (void)vl;
+    ((AnySibling *)user)->found = 1;
+    return 1;
+}
+
+/* Another name, in parent, for the file `id`. */
+int apfs_link(ApfsVolume *v, uint64_t id, uint64_t parent, const char *name) {
+    RawFind f;
+    if (inode_raw(v, id, &f)) return werr(v->c, "no inode %llu", (unsigned long long)id);
+    if ((rd16(f.v + 80) & 0170000) != 0100000) return werr(v->c, "only files get hard links");
+    ChildFind c = {name, 0, 0, 0};
+    if (apfs_readdir(v, parent, child_cb, &c)) return werr(v->c, "no directory");
+    if (c.found) return werr(v->c, "%s exists", name);
+    AnySibling any = {0};
+    fs_records(v, id, 5, any_sibling_cb, &any);
+    if (!any.found) { /* its first name becomes a sibling too */
+        uint16_t sz;
+        const uint8_t *nm = xfield(f.v + 92, (uint16_t)(f.vl - 92), 4 /* NAME */, &sz);
+        char first[256];
+        if (nm) snprintf(first, sizeof first, "%.*s", (int)sz, (const char *)nm);
+        else return werr(v->c, "inode %llu has no name to keep", (unsigned long long)id);
+        if (sibling_put(v, id, rd64(f.v), first)) return -1;
+    }
+    if (sibling_put(v, id, parent, name) || add_entry(v, parent, name, id, 8)) return -1;
+    if (inode_raw(v, id, &f)) return -1;
+    wr32(f.v + 56, rd32(f.v + 56) + 1);
+    return inode_put(v, f.v, f.vl, id, 1);
 }

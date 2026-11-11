@@ -1253,7 +1253,8 @@ public struct VPhoneCustomFirmwareInstaller {
     /// fraction of that. 10 GiB still stops it on a volume that is close to
     /// full.
     static func requiredFreeSpaceGiB(for mode: Mode) -> Int64 {
-        switch mode {
+        if MonolithDisk.shared.enabled { return 8 } // MONOLITH: everything is written into the image itself
+        return switch mode {
         case .full: 50
         case .environmentOnly, .kernelUpdate: 10
         }
@@ -1589,7 +1590,7 @@ public struct VPhoneCustomFirmwareInstaller {
             cacheCopy = try MonolithDisk.materialize(system.directory(cacheRelative), into: work.file("dyld-cache"))
             dsc = cacheCopy!.url.path
         }
-        defer { if let cacheCopy { do { try cacheCopy.writeBack() } catch { print("  [!] dyld cache write-back: \(error)") } } }
+        defer { if let cacheCopy { do { try cacheCopy.writeBack() } catch { MonolithDisk.shared.fail("dyld cache write-back: \(error)") } } }
         let widenedRegion = kernelPatches.map { $0.contains("kernel-boot-shared_region_size") }
             ?? version.hasPrefix("27.")
         let kernelRegionSize = widenedRegion
@@ -3554,7 +3555,12 @@ public struct VPhoneCustomFirmwareInstaller {
         }
         let root = try system.path
         for chunk in chunks {
+            if MonolithDisk.shared.enabled { // MONOLITH: no aa
+                let n = try MonolithAppleArchive.extract(work.file(chunk), into: system)
+                print("    \(chunk): \(n) entries")
+            } else {
             _ = try tool("/usr/bin/aa", ["extract", "-d", root, "-i", work.file(chunk).path])
+            }
             try work.directory.removeItem(chunk)
         }
         if let linkList {

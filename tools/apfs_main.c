@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
     if (at && apfs_use_snapshot(v, at[1] ? at + 1 : NULL)) { fprintf(stderr, "apfs: no such snapshot\n"); return 1; }
     if (!strcmp(argv[3], "snaps")) return apfs_snapshots(v, snap_cb, NULL) ? 1 : 0;
     if (!strcmp(argv[3], "mkdir") || !strcmp(argv[3], "put") || !strcmp(argv[3], "rm") || !strcmp(argv[3], "ln") ||
-        !strcmp(argv[3], "mv") || !strcmp(argv[3], "chmod")) {
+        !strcmp(argv[3], "mv") || !strcmp(argv[3], "chmod") || !strcmp(argv[3], "link")) {
         apfs_close(c);
         c = apfs_open_rw(argv[1], err, sizeof err);
         if (!c) { fprintf(stderr, "apfs: %s\n", err); return 1; }
@@ -90,6 +90,10 @@ int main(int argc, char **argv) {
             ApfsInode fi; uint64_t fd_ = apfs_lookup(v, from, &fi) ? 0 : fi.id;
             SPLIT(argv[5], d, leaf);
             r = fd_ && d ? apfs_rename(v, fd_, fleaf, d, leaf) : -1;
+        } else if (!strcmp(argv[3], "link") && argc > 5) {    /* link EXISTING NEWPATH */
+            ApfsInode in;
+            SPLIT(argv[5], d, leaf);
+            r = apfs_lookup(v, argv[4], &in) || !d ? -1 : apfs_link(v, in.id, d, leaf);
         } else if (!strcmp(argv[3], "chmod") && argc > 5) {   /* chmod MODE PATH */
             ApfsInode in;
             r = apfs_lookup(v, argv[5], &in) ? -1 : apfs_chmod(v, in.id, (uint16_t)strtol(argv[4], NULL, 8), (uint32_t)-1, (uint32_t)-1);
