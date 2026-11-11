@@ -105,6 +105,9 @@ test-vm-lifecycle: $(B)/test_vm_lifecycle
 $(B)/test_pvg_lifecycle: tests/test_pvg_lifecycle.m $(ENGINE) $(DEV)
 	$(CC) $(CFLAGS) -fobjc-arc $^ $(METAL_LIBS) -o $@
 
+$(B)/apfs: tools/apfs_main.c apfs/apfs.c apfs/apfs.h | $(B)
+	$(CC) $(CFLAGS) -Iapfs tools/apfs_main.c apfs/apfs.c -lz -lcompression -o $@
+
 $(B)/hvsparse: tools/hvsparse_main.c host/hvsparse.c host/hvsparse.h | $(B)
 	$(CC) $(CFLAGS) tools/hvsparse_main.c host/hvsparse.c -o $@
 
