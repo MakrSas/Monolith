@@ -369,10 +369,16 @@ struct SessionView: View {
                 DeviceButton(symbol: "speaker.plus", label: "Volume +", button: 2)
                 Rectangle().fill(Desk.hairline).frame(width: 0.5)
                 DeviceButton(symbol: "speaker.minus", label: "Volume −", button: 3)
+            } else if mac.screen.width == mac.screen.height { // a HomeView: its Home, and its apps
+                DeviceButton(symbol: "house", label: "Home", button: 0)
+                Rectangle().fill(Desk.hairline).frame(width: 0.5)
+                GuestAppsButton()
             } else if !homePod { // a watch: the crown and the side button
                 DigitalCrown().padding(.vertical, 10).padding(.horizontal, 14)
                 Rectangle().fill(Desk.hairline).frame(width: 0.5)
                 DeviceButton(symbol: "button.vertical.right.press", label: "Side", button: 1)
+                Rectangle().fill(Desk.hairline).frame(width: 0.5)
+                GuestAppsButton()
             }
         }
         .opacity(homePod ? 0 : 1)
