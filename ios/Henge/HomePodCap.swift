@@ -25,11 +25,30 @@ struct HomePodCap: View {
             .onChanged { v in touch(at: v.startLocation, in: v, began: true) }
             .onEnded { v in touch(at: v.startLocation, in: v, began: false) })
         .task { await poll() }
+        .task { await airPlayLog() }
     }
 
     private func updateSide(_ s: CGFloat) -> Bool {
         if side != s { DispatchQueue.main.async { side = s } }
         return true
+    }
+
+    /// The speaker's AirPlay receiver, as it tells its own log, copied into Monolith's: what a sender's
+    /// session runs into is only visible from inside.
+    private func airPlayLog() async {
+        try? await Task.sleep(nanoseconds: 60_000_000_000)
+        while !Task.isCancelled {
+            guard let r = await GuestAgent.rpc("logs.syslog", ["seconds": 30, "subsystem": "com.apple.airplay", "max_lines": 400],
+                                               timeout: 90),
+                  let entries = r["entries"] as? [[String: Any]] else {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                continue
+            }
+            for e in entries {
+                let msg = (e["message"] as? String ?? "").prefix(400)
+                HengeLog.log("airplay", "\(e["process"] as? String ?? "?") \(e["level"] as? String ?? "") \(e["category"] as? String ?? ""): \(msg)")
+            }
+        }
     }
 
     private func poll() async {
