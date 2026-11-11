@@ -147,13 +147,19 @@ public final class VPhoneConfinedDirectory: Sendable {
         guard absolutePath.hasPrefix("/"), !absolutePath.contains("\0") else {
             throw VPhoneConfinedDirectoryError.invalidPath(absolutePath)
         }
+        #if os(macOS) // MONOLITH
         var current = try VPhoneConfinedDirectory(root: "/")
+        #else // MONOLITH: the sandbox refuses the walk down from "/"; the app's own container is opened at once
+        var current = try VPhoneConfinedDirectory(root: absolutePath)
+        #endif
+        #if os(macOS) // MONOLITH
         for component in absolutePath.split(separator: "/").map(String.init) {
             guard component != ".", component != ".." else {
                 throw VPhoneConfinedDirectoryError.invalidPath(absolutePath)
             }
             current = try current.openChild(component, create: false, mode: 0, sameDevice: false, path: absolutePath)
         }
+        #endif
         if let owner {
             let metadata = try current.metadata()
             guard metadata.st_uid == owner else {
