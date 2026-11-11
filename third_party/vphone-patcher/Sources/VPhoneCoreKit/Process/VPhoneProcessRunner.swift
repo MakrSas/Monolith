@@ -20,14 +20,21 @@ public struct VPhoneProcessResult: Sendable {
 
 // MARK: - VPhoneProcessRunner
 
-#if !os(macOS)
 /// MONOLITH: iOS runs no other programs. Every place that would names its tool in the error, so each one
-/// gets its replacement in Monolith (its own APFS code, AppleArchive, ...).
+/// gets its replacement in Monolith. On a Mac, MONOLITH_NO_PROCESS=1 behaves the same, to test that.
 public struct VPhoneProcessUnavailable: Error, CustomStringConvertible {
     public let tool: String
     public init(tool: String) { self.tool = tool }
     public var description: String { "\(tool) cannot be run on iOS" }
 }
+
+#if os(macOS)
+let monolithNoProcess = ProcessInfo.processInfo.environment["MONOLITH_NO_PROCESS"] == "1"
+#endif
+
+#if !os(macOS)
+/// MONOLITH: iOS runs no other programs. Every place that would names its tool in the error, so each one
+/// gets its replacement in Monolith (its own APFS code, AppleArchive, ...).
 
 public enum VPhoneProcessRunner {
     public static func runCapturing(_ executable: URL, _ args: [String], cwd: URL? = nil,
@@ -80,6 +87,7 @@ public enum VPhoneProcessRunner {
         cwd: URL? = nil,
         env: [String: String]? = nil,
     ) throws -> VPhoneProcessResult {
+        if monolithNoProcess { throw VPhoneProcessUnavailable(tool: ([executable.lastPathComponent] + args.prefix(2)).joined(separator: " ")) }
         let process = Process()
         process.executableURL = executable
         process.arguments = args
@@ -142,6 +150,7 @@ public enum VPhoneProcessRunner {
         env: [String: String]? = nil,
         echo: Bool = true,
     ) throws -> Int32 {
+        if monolithNoProcess { throw VPhoneProcessUnavailable(tool: ([executable.lastPathComponent] + args.prefix(2)).joined(separator: " ")) }
         let process = Process()
         process.executableURL = executable
         process.arguments = args
@@ -180,6 +189,7 @@ public enum VPhoneProcessRunner {
         env: [String: String]? = nil,
         echo: Bool = true,
     ) throws -> Int32 {
+        if monolithNoProcess { throw VPhoneProcessUnavailable(tool: ([executable.lastPathComponent] + args.prefix(2)).joined(separator: " ")) }
         let process = Process()
         process.executableURL = executable
         process.arguments = args

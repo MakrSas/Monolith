@@ -204,9 +204,8 @@ public struct VPhoneCustomFirmwareInstaller {
             .union(Set(Self.lateGuestPatches).intersection(effectiveEnabled))
         let disk = try openDiskImage(in: bundleDirectory, path: bundlePath, owner: callerUID)
         let diskPath = (bundlePath as NSString).appendingPathComponent("Disk.img")
-        let busy = try VPhoneProcessRunner.runCapturing(
-            URL(fileURLWithPath: "/usr/sbin/lsof"), ["-t", "--", diskPath],
-        )
+        let busy = try MonolithDisk.shared.answer("/usr/sbin/lsof", ["-t", "--", diskPath]).map { VPhoneProcessResult(exitCode: 0, stdout: $0, stderr: "") } // MONOLITH
+            ?? VPhoneProcessRunner.runCapturing(URL(fileURLWithPath: "/usr/sbin/lsof"), ["-t", "--", diskPath])
         // openDiskImage holds our verified descriptor throughout the install,
         // so lsof always lists this process even when the VM is stopped.
         try Self.requireDiskUnused(lsofOutput: busy.stdout, rerun: "run \(mode.summary) again")
@@ -769,9 +768,8 @@ public struct VPhoneCustomFirmwareInstaller {
 
         let disk = try openDiskImage(in: bundleDirectory, path: bundlePath, owner: callerUID)
         let diskPath = (bundlePath as NSString).appendingPathComponent("Disk.img")
-        let busy = try VPhoneProcessRunner.runCapturing(
-            URL(fileURLWithPath: "/usr/sbin/lsof"), ["-t", "--", diskPath],
-        )
+        let busy = try MonolithDisk.shared.answer("/usr/sbin/lsof", ["-t", "--", diskPath]).map { VPhoneProcessResult(exitCode: 0, stdout: $0, stderr: "") } // MONOLITH
+            ?? VPhoneProcessRunner.runCapturing(URL(fileURLWithPath: "/usr/sbin/lsof"), ["-t", "--", diskPath])
         try Self.requireDiskUnused(lsofOutput: busy.stdout, rerun: "run the kernel update again")
 
         let work = try makeWorkDirectory()

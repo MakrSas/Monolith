@@ -56,6 +56,8 @@ final class MonolithDisk: @unchecked Sendable {
                   let n = Int(device.split(separator: "s").last ?? "") else { throw failure("mount_apfs \(arguments)") }
             mounted[URL(fileURLWithPath: mountPoint).lastPathComponent] = n - 1
             return ""
+        case ("lsof", _): // Monolith's images are only open in Monolith
+            return ""
         case ("umount", _), ("diskutil", "unmountDisk"):
             return ""
         case ("diskutil", "eject"):
