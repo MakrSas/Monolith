@@ -312,6 +312,13 @@ int hv_vmapple_create(HvVmapple *b, HvMachine *m, HvCpu *cpu, uint64_t ram_size,
         b->scratch = mmap(NULL, 0x200000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
         if (b->scratch == MAP_FAILED) return -1;
         hv_machine_add_ram(m, 0x500000, 0x200000, b->scratch, 0);
+        /* Newer OpenAVB builds keep the iLLB resident in SRAM at 0x1fc000000 ("iLLB SRAM resident"): RAM there
+           unless guest RAM (from VMAPPLE_MEM) already reaches it. */
+        if (VMAPPLE_MEM + ram_size <= 0x1fc000000ull) {
+            uint8_t *sram = mmap(NULL, 0x1000000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+            if (sram == MAP_FAILED) return -1;
+            hv_machine_add_ram(m, 0x1fc000000ull, 0x1000000, sram, 0);
+        }
         b->vpiop = hv_vpiop_create(m, b->gic, 0x30250000, 32 + 0x14);
     }
     HvCfgParams p = *cfg;

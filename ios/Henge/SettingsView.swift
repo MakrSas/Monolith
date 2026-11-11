@@ -120,6 +120,10 @@ struct SettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 .listRowBackground(Desk.card)
+                Section("Storage") {
+                    NavigationLink { StorageView() } label: { Label("Files and machines", systemImage: "internaldrive") }
+                }
+                .listRowBackground(Desk.card)
                 Section("Log") {
                     ShareLink(item: HengeLog.logFileURL) { Label("Share henge.log", systemImage: "square.and.arrow.up") }
                 }
