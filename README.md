@@ -6,6 +6,8 @@
 
 <p align="center">Apple's devices on your iPhone and iPad: HomePod, HomeView, Apple Watch, Apple TV and the Mac.</p>
 
+<p align="center"><sub>The icon is temporary: Monolith uses Henge's until it has its own.</sub></p>
+
 <p align="center">
   <a href="#install">Install</a>
   ·
