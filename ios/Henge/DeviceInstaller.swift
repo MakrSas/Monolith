@@ -84,6 +84,16 @@ final class DeviceInstaller: ObservableObject {
         try FileManager.default.createDirectory(at: library, withIntermediateDirectories: true)
         setenv("VPHONE_ROOT", root.path, 1) // vphone's IPSW cache goes here too
         VPhoneResources.monolithBase = resources
+        // vphone machines only live while an install runs (a finished one moves into Monolith's),
+        // so any left here are from an install that failed or was killed; so are half downloads.
+        for leftover in (try? FileManager.default.contentsOfDirectory(at: library, includingPropertiesForKeys: nil)) ?? []
+        where leftover.lastPathComponent.hasPrefix("m-") {
+            HengeLog.log("device-install", "removing the unfinished \(leftover.lastPathComponent)")
+            try? FileManager.default.removeItem(at: leftover)
+        }
+        let cache = root.appendingPathComponent("ipsws", isDirectory: true)
+        for partial in (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil)) ?? []
+        where partial.pathExtension == "partial" { try? FileManager.default.removeItem(at: partial) }
         let slug = "m-" + UUID().uuidString.prefix(8).lowercased()
         let vm = library.appendingPathComponent(slug, isDirectory: true)
         let ecid = UInt64.random(in: 1 << 40 ..< 1 << 62)
@@ -192,6 +202,17 @@ final class DeviceInstaller: ObservableObject {
         let ram = GuestMemory.prepare(restoring)
         guard ram >= 2048 else { throw message("The restore needs a few more GB of free storage for the device's memory.") }
         setenv("HV_WRITE_CACHE", "0", 1)
+        // vphone makes these with Virtualization.framework on a Mac; here they are Monolith's own.
+        let nvram = vm.appendingPathComponent("nvram.bin"), disk = vm.appendingPathComponent("Disk.img")
+        if !FileManager.default.fileExists(atPath: nvram.path) {
+            guard henge_make_aux(nvram.path) == 0 else { throw message("Cannot create the auxiliary storage.") }
+        }
+        if !FileManager.default.fileExists(atPath: disk.path) {
+            guard FileManager.default.createFile(atPath: disk.path, contents: nil) else { throw message("Cannot create the disk.") }
+            let h = try FileHandle(forWritingTo: disk)
+            try h.truncate(atOffset: UInt64(64) << 30)
+            try h.close()
+        }
         henge_vm_set_sep(vm.appendingPathComponent("OpenSEP.bin").path, vm.appendingPathComponent("SEPStorage").path)
         let work = vm.appendingPathComponent("restore-work", isDirectory: true)
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
