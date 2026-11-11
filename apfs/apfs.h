@@ -75,5 +75,8 @@ int apfs_chmod(ApfsVolume *v, uint64_t id, uint16_t mode, uint32_t uid, uint32_t
 int apfs_unlink(ApfsVolume *v, uint64_t parent, const char *name);
 int apfs_rename(ApfsVolume *v, uint64_t from_dir, const char *from, uint64_t to_dir, const char *to);
 int apfs_commit(ApfsContainer *c);
+/* One entry of a directory by name, and all of them (*out malloc'd). */
+int apfs_child(ApfsVolume *v, uint64_t dir, const char *name, uint64_t *id, uint16_t *type);
+int apfs_list(ApfsVolume *v, uint64_t dir, ApfsDirEntry **out, size_t *count);
 
 #endif

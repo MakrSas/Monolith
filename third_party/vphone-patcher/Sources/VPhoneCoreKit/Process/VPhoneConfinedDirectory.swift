@@ -99,6 +99,15 @@ public final class VPhoneConfinedFile: Sendable {
 public final class VPhoneConfinedDirectory: Sendable {
     public let descriptor: Int32
     public let device: dev_t
+    /// MONOLITH: set for a directory in an APFS image opened with Monolith's code (VPhoneAPFSImage);
+    /// every operation then goes there instead of to a descriptor (VPhoneConfinedDirectory+APFS.swift).
+    public let apfs: VPhoneAPFSNode?
+
+    init(apfs node: VPhoneAPFSNode) {
+        descriptor = -1
+        device = node.device
+        apfs = node
+    }
 
     private init(adopting descriptor: Int32, name: String) throws {
         var metadata = stat()
@@ -113,6 +122,7 @@ public final class VPhoneConfinedDirectory: Sendable {
         }
         self.descriptor = descriptor
         device = metadata.st_dev
+        apfs = nil
     }
 
     /// Open `path` as the confinement root. Only the last component is
@@ -126,7 +136,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     }
 
     deinit {
-        close(descriptor)
+        if descriptor >= 0 { close(descriptor) }
     }
 
     /// Open an absolute, canonical path from `/` one component at a time,
@@ -160,6 +170,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     /// use it for directories nobody else can rename.
     public var path: String {
         get throws {
+            if let apfs { return "apfs:" + apfs.image.url.path + "#/" + apfs.path }
             var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
             guard fcntl(descriptor, F_GETPATH, &buffer) == 0 else {
                 throw VPhoneConfinedDirectoryError.system("F_GETPATH", errno)
@@ -170,6 +181,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     }
 
     public func metadata() throws -> stat {
+        if let apfs { return try apfsMetadata(apfs) }
         var metadata = stat()
         guard fstat(descriptor, &metadata) == 0 else {
             throw VPhoneConfinedDirectoryError.system(".", errno)
@@ -178,6 +190,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     }
 
     public func fileSystemStatus() throws -> statfs {
+        if apfs != nil { throw VPhoneConfinedDirectoryError.system("statfs on an APFS image", ENOTSUP) }
         var status = statfs()
         guard fstatfs(descriptor, &status) == 0 else {
             throw VPhoneConfinedDirectoryError.system(".", errno)
@@ -187,6 +200,7 @@ public final class VPhoneConfinedDirectory: Sendable {
 
     /// The device a mounted volume came from, such as `/dev/disk5s1`.
     public func mountedFrom() throws -> String {
+        if let apfs { return apfs.image.url.path }
         var status = try fileSystemStatus()
         return withUnsafePointer(to: &status.f_mntfromname) {
             $0.withMemoryRebound(to: CChar.self, capacity: Int(MNAMELEN)) { String(cString: $0) }
@@ -199,6 +213,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     public func directory(_ relative: String, create: Bool = false, mode: mode_t = 0o755) throws
         -> VPhoneConfinedDirectory
     {
+        if let apfs { return try apfsDirectory(apfs, relative, create: create, mode: mode) }
         var current = self
         for component in try Self.components(of: relative) {
             current = try current.openChild(component, create: create, mode: mode, sameDevice: true, path: relative)
@@ -209,6 +224,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     /// Open the root of a volume mounted on the direct child `name`. This is
     /// the one walk that expects the device to change; check `mountedFrom()`.
     public func mountedVolume(_ name: String) throws -> VPhoneConfinedDirectory {
+        if apfs != nil { throw VPhoneConfinedDirectoryError.missing("a volume mounted on \(name)") }
         let components = try Self.components(of: name)
         guard components.count == 1 else {
             throw VPhoneConfinedDirectoryError.invalidPath(name)
@@ -224,6 +240,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     public func parent(of relative: String, create: Bool = false, mode: mode_t = 0o755) throws
         -> (directory: VPhoneConfinedDirectory, leaf: String)
     {
+        if let apfs { return try apfsParent(apfs, relative, create: create, mode: mode) }
         let components = try Self.components(of: relative)
         var current = self
         for component in components.dropLast() {
@@ -234,7 +251,8 @@ public final class VPhoneConfinedDirectory: Sendable {
 
     /// The names in this directory, without `.` and `..`, sorted.
     public func entries() throws -> [String] {
-        try Self.entries(of: descriptor, path: ".")
+        if let apfs { return try apfs.names().map(\.name) }
+        return try Self.entries(of: descriptor, path: ".")
     }
 
     // MARK: - Inspection
@@ -242,6 +260,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     /// `lstat` of `relative`, or nil when it or a folder above it is absent.
     /// A symbolic link above the leaf still throws.
     public func status(_ relative: String) throws -> stat? {
+        if let apfs { return try apfsStatus(apfs, relative) }
         let parent: (directory: VPhoneConfinedDirectory, leaf: String)
         do {
             parent = try self.parent(of: relative)
@@ -276,6 +295,7 @@ public final class VPhoneConfinedDirectory: Sendable {
 
     /// The link's target text, or nil when `relative` is absent or not a link.
     public func readLink(_ relative: String) throws -> String? {
+        if let apfs { return try apfsReadLink(apfs, relative) }
         guard try isSymlink(relative) else { return nil }
         let (directory, leaf) = try parent(of: relative)
         var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) + 1)
@@ -297,6 +317,7 @@ public final class VPhoneConfinedDirectory: Sendable {
         requireOwner owner: uid_t? = nil,
         requireSingleLink: Bool = false,
     ) throws -> VPhoneConfinedFile {
+        if let apfs { return try apfsOpen(apfs, relative, requireOwner: owner) }
         let (directory, leaf) = try parent(of: relative)
         let file = openat(directory.descriptor, leaf, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard file >= 0 else {
@@ -324,6 +345,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     }
 
     public func readData(_ relative: String) throws -> Data {
+        if let apfs { return try apfsReadData(apfs, relative) }
         let file = try openRegularFile(relative)
         var data = Data(capacity: Int(max(file.size, 0)))
         var buffer = [UInt8](repeating: 0, count: 1 << 16)
@@ -361,6 +383,7 @@ public final class VPhoneConfinedDirectory: Sendable {
         mode: mode_t,
         owner: (uid: uid_t, gid: gid_t)? = nil,
     ) throws {
+        if let apfs { return try apfsWrite(apfs, relative, data, mode: mode, owner: owner) }
         try install(relative, mode: mode, owner: owner) { file in
             try Self.writeAll(data, to: file, path: relative)
         }
@@ -370,6 +393,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     /// inode, its mode and owner stay, so every hard link to it gets `data`
     /// too: for a file shared on purpose. `writeFile` gives a name its own file.
     public func overwriteFile(_ relative: String, contents data: Data) throws {
+        if let apfs { return try apfsOverwrite(apfs, relative, data) }
         let (directory, leaf) = try parent(of: relative)
         let file = openat(directory.descriptor, leaf, O_WRONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard file >= 0 else {
@@ -414,6 +438,7 @@ public final class VPhoneConfinedDirectory: Sendable {
         mode: mode_t,
         owner: (uid: uid_t, gid: gid_t)? = nil,
     ) throws {
+        if let apfs { return try apfsWrite(apfs, relative, Data(contentsOf: source), mode: mode, owner: owner) }
         let input = open(source.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard input >= 0 else {
             throw VPhoneConfinedDirectoryError.from(errno, source.path)
@@ -437,6 +462,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     /// in `target`, keeping its mode and (when running as root) its owner.
     /// The destination must not exist yet.
     public func copyFile(from source: String, to destination: String, in target: VPhoneConfinedDirectory? = nil) throws {
+        if apfs != nil || target?.apfs != nil { return try apfsCopyFile(source, destination, target ?? self) }
         let input = try openRegularFile(source)
         let (directory, leaf) = try (target ?? self).parent(of: destination)
         let output = openat(directory.descriptor, leaf, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
@@ -461,6 +487,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     /// Clone an already verified open file into this directory. Returns false
     /// when the two are on volumes that cannot share blocks.
     public func clone(_ file: VPhoneConfinedFile, to relative: String) throws -> Bool {
+        if apfs != nil { return false }
         let (directory, leaf) = try parent(of: relative)
         guard fclonefileat(file.descriptor, directory.descriptor, leaf, UInt32(CLONE_NOOWNERCOPY)) == 0 else {
             switch errno {
@@ -475,6 +502,7 @@ public final class VPhoneConfinedDirectory: Sendable {
 
     /// Stream an already verified open file into a new file in this directory.
     public func copy(_ file: VPhoneConfinedFile, to relative: String, mode: mode_t = 0o600) throws {
+        if let apfs { return try apfsCopy(apfs, file, relative, mode: mode) }
         let (directory, leaf) = try parent(of: relative)
         let output = openat(directory.descriptor, leaf, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, mode)
         guard output >= 0 else {
@@ -494,6 +522,7 @@ public final class VPhoneConfinedDirectory: Sendable {
 
     /// Replace whatever is at `relative` with a symbolic link to `target`.
     public func createSymlink(target: String, at relative: String) throws {
+        if let apfs { return try apfsSymlink(apfs, target, relative) }
         let (directory, leaf) = try parent(of: relative)
         _ = try Self.removeEntry(in: directory.descriptor, named: leaf, device: directory.device, path: relative)
         guard symlinkat(target, directory.descriptor, leaf) == 0 else {
@@ -503,6 +532,7 @@ public final class VPhoneConfinedDirectory: Sendable {
 
     /// `renameat` between two leaves, in this directory or into `target`.
     public func rename(_ source: String, to destination: String, in target: VPhoneConfinedDirectory? = nil) throws {
+        if let apfs { return try apfsRename(apfs, source, destination, (target ?? self).apfs) }
         let from = try parent(of: source)
         let to = try (target ?? self).parent(of: destination)
         guard renameat(from.directory.descriptor, from.leaf, to.directory.descriptor, to.leaf) == 0 else {
@@ -511,6 +541,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     }
 
     public func setMode(_ relative: String, _ mode: mode_t) throws {
+        if let apfs { return try apfsChmod(apfs, relative, mode: mode, owner: nil) }
         let (directory, leaf) = try parent(of: relative)
         guard fchmodat(directory.descriptor, leaf, mode, AT_SYMLINK_NOFOLLOW) == 0 else {
             throw VPhoneConfinedDirectoryError.from(errno, relative)
@@ -520,10 +551,12 @@ public final class VPhoneConfinedDirectory: Sendable {
     /// Change this pinned directory itself, without resolving its path again.
     /// A writable ancestor may have been renamed since it was opened.
     public func setPermissions(mode: mode_t, owner: (uid: uid_t, gid: gid_t)? = nil) throws {
+        if let apfs { return try apfsSetOwnPermissions(apfs, mode: mode, owner: owner) }
         try Self.applyAttributes(to: descriptor, owner: owner, mode: mode, path: path)
     }
 
     public func setOwner(_ relative: String, uid: uid_t, gid: gid_t) throws {
+        if let apfs { return try apfsChmod(apfs, relative, mode: nil, owner: (uid, gid)) }
         let (directory, leaf) = try parent(of: relative)
         guard fchownat(directory.descriptor, leaf, uid, gid, AT_SYMLINK_NOFOLLOW) == 0 else {
             throw VPhoneConfinedDirectoryError.from(errno, relative)
@@ -539,6 +572,7 @@ public final class VPhoneConfinedDirectory: Sendable {
     /// with a second hard link frees nothing and counts as nothing.
     @discardableResult
     public func removeItem(_ relative: String) throws -> UInt64 {
+        if let apfs { return try apfsRemove(apfs, relative) }
         let parent: (directory: VPhoneConfinedDirectory, leaf: String)
         do {
             parent = try self.parent(of: relative)
@@ -566,6 +600,7 @@ public final class VPhoneConfinedDirectory: Sendable {
         owner: (uid: uid_t, gid: gid_t)? = nil,
         clearSetID: Bool = true,
     ) throws {
+        if apfs != nil || source.apfs != nil { return try apfsCopyTree(from: source, to: relative, owner: owner, clearSetID: clearSetID) }
         let rootMetadata = try source.metadata()
         if let sourceOwner, rootMetadata.st_uid != sourceOwner {
             throw VPhoneConfinedDirectoryError.foreignOwner(relative, rootMetadata.st_uid)

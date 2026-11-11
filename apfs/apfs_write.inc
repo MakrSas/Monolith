@@ -1260,3 +1260,30 @@ int apfs_rename(ApfsVolume *v, uint64_t from_dir, const char *from, uint64_t to_
     wr64(val, to_dir);
     return inode_put(v, val, vl, f.id, 1);
 }
+
+/* ---- conveniences for callers in other languages ---- */
+
+int apfs_child(ApfsVolume *v, uint64_t dir, const char *name, uint64_t *id, uint16_t *type) {
+    ChildFind f = {name, 0, 0, 0};
+    if (apfs_readdir(v, dir, child_cb, &f) || !f.found) return -1;
+    *id = f.id;
+    *type = f.type;
+    return 0;
+}
+
+typedef struct { ApfsDirEntry *e; size_t n, cap; } ListAcc;
+
+static int list_cb(const ApfsDirEntry *e, void *user) {
+    ListAcc *a = user;
+    if (a->n == a->cap) { a->cap = a->cap ? a->cap * 2 : 64; a->e = realloc(a->e, a->cap * sizeof *a->e); }
+    a->e[a->n++] = *e;
+    return 0;
+}
+
+int apfs_list(ApfsVolume *v, uint64_t dir, ApfsDirEntry **out, size_t *count) {
+    ListAcc a = {NULL, 0, 0};
+    if (apfs_readdir(v, dir, list_cb, &a)) { free(a.e); return -1; }
+    *out = a.e;
+    *count = a.n;
+    return 0;
+}
