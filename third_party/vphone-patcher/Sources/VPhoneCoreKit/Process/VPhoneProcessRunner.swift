@@ -1,0 +1,238 @@
+import Foundation
+
+// MARK: - VPhoneProcessResult
+
+public struct VPhoneProcessResult: Sendable {
+    public let exitCode: Int32
+    public let stdout: String
+    public let stderr: String
+
+    public init(exitCode: Int32, stdout: String, stderr: String) {
+        self.exitCode = exitCode
+        self.stdout = stdout
+        self.stderr = stderr
+    }
+
+    public var succeeded: Bool {
+        exitCode == 0
+    }
+}
+
+// MARK: - VPhoneProcessRunner
+
+#if !os(macOS)
+/// MONOLITH: iOS runs no other programs. Every place that would names its tool in the error, so each one
+/// gets its replacement in Monolith (its own APFS code, AppleArchive, ...).
+public struct VPhoneProcessUnavailable: Error, CustomStringConvertible {
+    public let tool: String
+    public init(tool: String) { self.tool = tool }
+    public var description: String { "\(tool) cannot be run on iOS" }
+}
+
+public enum VPhoneProcessRunner {
+    public static func runCapturing(_ executable: URL, _ args: [String], cwd: URL? = nil,
+                                    env: [String: String]? = nil) throws -> VPhoneProcessResult {
+        throw VPhoneProcessUnavailable(tool: ([executable.lastPathComponent] + args.prefix(2)).joined(separator: " "))
+    }
+
+    public static func runStreaming(_ executable: URL, _ args: [String], cwd: URL? = nil,
+                                    env: [String: String]? = nil, echo: Bool = true) throws -> Int32 {
+        throw VPhoneProcessUnavailable(tool: ([executable.lastPathComponent] + args.prefix(2)).joined(separator: " "))
+    }
+
+    public static func runForeground(_ executable: URL, _ args: [String], cwd: URL? = nil,
+                                     env: [String: String]? = nil, echo: Bool = true) throws -> Int32 {
+        throw VPhoneProcessUnavailable(tool: ([executable.lastPathComponent] + args.prefix(2)).joined(separator: " "))
+    }
+}
+#else
+public enum VPhoneProcessRunner {
+    /// A reader records its result before leaving the drain group. The lock
+    /// protects the result across the reader and caller threads.
+    private final class DataBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var result: Result<Data, Error> = .success(Data())
+
+        func read(from handle: FileHandle) {
+            defer { try? handle.close() }
+            let result = Result { try handle.readToEnd() ?? Data() }
+            lock.lock()
+            self.result = result
+            lock.unlock()
+        }
+
+        func take() throws -> Data {
+            lock.lock()
+            defer { lock.unlock() }
+            return try result.get()
+        }
+    }
+
+    /// Run `executable args` to completion, capturing stdout/stderr.
+    /// Throws if the process cannot be launched or an output pipe cannot be
+    /// read; a nonzero exit is returned in the result, not thrown.
+    ///
+    /// Both pipes are drained concurrently. Blocking readers observe EOF
+    /// independently of FileHandle readability-handler notifications.
+    public static func runCapturing(
+        _ executable: URL,
+        _ args: [String],
+        cwd: URL? = nil,
+        env: [String: String]? = nil,
+    ) throws -> VPhoneProcessResult {
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = args
+        if let cwd {
+            process.currentDirectoryURL = cwd
+        }
+        if let env {
+            process.environment = env
+        }
+
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errPipe
+
+        let outBox = DataBox()
+        let errBox = DataBox()
+        let group = DispatchGroup()
+        try process.run()
+        for (handle, box) in [
+            (outPipe.fileHandleForReading, outBox),
+            (errPipe.fileHandleForReading, errBox),
+        ] {
+            group.enter()
+            Thread.detachNewThread {
+                box.read(from: handle)
+                group.leave()
+            }
+        }
+        process.waitUntilExit()
+        group.wait()
+
+        return VPhoneProcessResult(
+            exitCode: process.terminationStatus,
+            stdout: String(decoding: try outBox.take(), as: UTF8.self),
+            stderr: String(decoding: try errBox.take(), as: UTF8.self),
+        )
+    }
+
+    // `runCountingTarPipe` lived here: a two-stage `/usr/bin/tar` pipe with a
+    // byte counter between the stages, used only by `vm export` and
+    // `vm import`. Both now pack and unpack in-process through
+    // `VPhoneArchiveKit`, which counts its own bytes, so the helper had no
+    // callers left. It is gone rather than kept: a public convenience for
+    // spawning tar is an invitation to shell out again, and the point of the
+    // migration was that a machine with no `zstd(1)` on PATH can still import
+    // a `.tzst`. The `/usr/bin/tar` call sites left in FirmwarePatcher unpack
+    // onto a mounted guest volume with --preserve-permissions; none of them
+    // ever went through here.
+
+    /// Run `executable args`, inheriting the parent's stdout/stderr so output
+    /// streams live to the terminal (for long-running tools: downloads, restore,
+    /// CFW install). Returns the child's exit status; throws only on spawn failure.
+    /// When `echo` is false, the child's stdout/stderr are redirected to the null
+    /// device so nothing reaches the terminal; the exit status is still returned.
+    public static func runStreaming(
+        _ executable: URL,
+        _ args: [String],
+        cwd: URL? = nil,
+        env: [String: String]? = nil,
+        echo: Bool = true,
+    ) throws -> Int32 {
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = args
+        if let cwd {
+            process.currentDirectoryURL = cwd
+        }
+        if let env {
+            process.environment = env
+        }
+
+        if !echo {
+            let devNull = FileHandle.nullDevice
+            process.standardOutput = devNull
+            process.standardError = devNull
+        }
+        // When echo is true: no pipe redirection → child inherits our stdio (live streaming).
+
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus
+    }
+
+    /// Run `executable args` as a controlling-terminal FOREGROUND job.
+    ///
+    /// Foundation spawns children in a new process group, which leaves them in
+    /// the *background* of the terminal — an interactive program they run (e.g.
+    /// `sudo`) then can't disable echo or read the tty (the password shows and
+    /// isn't delivered). This hands the terminal to the child's group via
+    /// `tcsetpgrp` for the duration, so sudo owns the tty and reads the password
+    /// directly; our process never sees it. Our foreground group is restored on
+    /// return. Falls back to a plain inherited run when there is no tty.
+    public static func runForeground(
+        _ executable: URL,
+        _ args: [String],
+        cwd: URL? = nil,
+        env: [String: String]? = nil,
+        echo: Bool = true,
+    ) throws -> Int32 {
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = args
+        if let cwd {
+            process.currentDirectoryURL = cwd
+        }
+        if let env {
+            process.environment = env
+        }
+        // When echo is false, suppress the child's normal output — but it still
+        // becomes the terminal's foreground group below, so an interactive sudo
+        // it runs still prompts/reads via /dev/tty (independent of stdout/stderr).
+        if !echo {
+            let devNull = FileHandle.nullDevice
+            process.standardOutput = devNull
+            process.standardError = devNull
+        }
+
+        var ttyFD = FileHandle.standardInput.fileDescriptor
+        var openedTTY = false
+        if isatty(ttyFD) == 0 {
+            let fd = open("/dev/tty", O_RDWR)
+            guard fd >= 0 else {
+                try process.run()
+                process.waitUntilExit()
+                return process.terminationStatus
+            }
+            ttyFD = fd
+            openedTTY = true
+        }
+
+        let savedFg = tcgetpgrp(ttyFD)
+        // tcsetpgrp from a background group would raise SIGTTOU/SIGTTIN (default:
+        // stop). Ignore them while we juggle the foreground group.
+        let prevTTOU = signal(SIGTTOU, SIG_IGN)
+        let prevTTIN = signal(SIGTTIN, SIG_IGN)
+        defer {
+            signal(SIGTTOU, prevTTOU)
+            signal(SIGTTIN, prevTTIN)
+            if openedTTY {
+                close(ttyFD)
+            }
+        }
+
+        try process.run()
+        _ = tcsetpgrp(ttyFD, process.processIdentifier) // hand the tty to the child
+        process.waitUntilExit()
+        if savedFg > 0 {
+            _ = tcsetpgrp(ttyFD, savedFg)
+        } // take it back
+        return process.terminationStatus
+    }
+}
+
+
+#endif
