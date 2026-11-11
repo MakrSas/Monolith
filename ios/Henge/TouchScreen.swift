@@ -18,14 +18,50 @@ struct TouchScreen: UIViewRepresentable {
 
         required init?(coder: NSCoder) { fatalError() }
 
-        private func send(_ touch: UITouch, down: Bool) {
-            guard let finger = fingers[ObjectIdentifier(touch)], bounds.width > 0, bounds.height > 0 else { return }
+        /// A touch that started at an edge of the screen: it goes through the guest agent with the
+        /// digitizer's edge flag, which the USB touch screen's report has no room for and without which
+        /// the guest's edge gestures (Control Center, Home) never start. vphone does the same.
+        private var edgeTouch: (id: ObjectIdentifier, edge: Int)?
+        private let edgeQueue = EdgeTouchQueue()
+
+        private func point(_ touch: UITouch) -> (Double, Double) {
             let p = touch.location(in: self)
-            henge_vm_screen_touch(Int32(finger), down ? 1 : 0, Double(p.x / bounds.width), Double(p.y / bounds.height))
+            return (min(max(Double(p.x / bounds.width), 0), 1), min(max(Double(p.y / bounds.height), 0), 1))
+        }
+
+        /// 1 top, 2 bottom, 4 right, 8 left (vphone's encoding), 0 inside.
+        private func edge(at x: Double, _ y: Double) -> Int {
+            let mx = 22 / Double(bounds.width), my = 22 / Double(bounds.height) // about a fingertip
+            if y < my { return 1 }
+            if y > 1 - my { return 2 }
+            if x > 1 - mx { return 4 }
+            if x < mx { return 8 }
+            return 0
+        }
+
+        private func send(_ touch: UITouch, down: Bool) {
+            guard bounds.width > 0, bounds.height > 0 else { return }
+            if let e = edgeTouch, e.id == ObjectIdentifier(touch) {
+                let (x, y) = point(touch)
+                edgeQueue.send(phase: down ? "move" : "up", x: x, y: y, edge: e.edge)
+                return
+            }
+            guard let finger = fingers[ObjectIdentifier(touch)] else { return }
+            let (x, y) = point(touch)
+            henge_vm_screen_touch(Int32(finger), down ? 1 : 0, x, y)
         }
 
         override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
             for t in touches {
+                if bounds.width > 0, edgeTouch == nil, fingers.isEmpty {
+                    let (x, y) = point(t)
+                    let e = edge(at: x, y)
+                    if e != 0 {
+                        edgeTouch = (ObjectIdentifier(t), e)
+                        edgeQueue.send(phase: "down", x: x, y: y, edge: e)
+                        continue
+                    }
+                }
                 guard let free = (0..<4).first(where: { !fingers.values.contains($0) }) else { break }
                 fingers[ObjectIdentifier(t)] = free
                 send(t, down: true)
@@ -39,6 +75,7 @@ struct TouchScreen: UIViewRepresentable {
         override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
             for t in touches {
                 send(t, down: false)
+                if edgeTouch?.id == ObjectIdentifier(t) { edgeTouch = nil }
                 fingers[ObjectIdentifier(t)] = nil
             }
         }
@@ -202,5 +239,27 @@ struct TVRemote: View {
                 .frame(width: 52, height: 52).background(Color(white: 0.2), in: Circle())
         }
         .accessibilityLabel(label)
+    }
+}
+
+
+/// Edge touches to the guest agent one after another, in order: a move may not overtake its down.
+/// Moves that pile up while one is on its way are merged into the newest.
+final class EdgeTouchQueue {
+    private var pending: [(phase: String, x: Double, y: Double, edge: Int)] = []
+    private var running = false
+
+    func send(phase: String, x: Double, y: Double, edge: Int) {
+        if phase == "move", let last = pending.last, last.phase == "move" { pending.removeLast() }
+        pending.append((phase, x, y, edge))
+        guard !running else { return }
+        running = true
+        Task { @MainActor in
+            while !self.pending.isEmpty {
+                let t = self.pending.removeFirst()
+                _ = await GuestAgent.rpc("input.touch", ["phase": t.phase, "x": t.x, "y": t.y, "normalized": true, "edge": t.edge], timeout: 3)
+            }
+            self.running = false
+        }
     }
 }
