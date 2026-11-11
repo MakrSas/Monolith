@@ -38,12 +38,13 @@ struct HomePodCap: View {
     private func airPlayLog() async {
         try? await Task.sleep(nanoseconds: 60_000_000_000)
         while !Task.isCancelled {
-            guard let r = await GuestAgent.rpc("logs.syslog", ["seconds": 30, "process": "airplayd", "max_lines": 1500],
-                                               timeout: 90),
-                  let entries = r["entries"] as? [[String: Any]] else {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
+            let r = await GuestAgent.rpc("logs.syslog", ["seconds": 10, "process": "airplayd", "max_lines": 1500], timeout: 40)
+            guard let r, let entries = r["entries"] as? [[String: Any]] else {
+                HengeLog.log("airplay", "no log: \(r.map { "\($0)".prefix(200) } ?? "no answer")")
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
                 continue
             }
+            if entries.isEmpty { continue }
             for e in entries {
                 if (e["message"] as? String ?? "").contains("iscovery") { continue } // the browser's chatter, many per second
                 let msg = (e["message"] as? String ?? "").prefix(400)
