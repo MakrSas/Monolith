@@ -5,6 +5,7 @@
 // shared cache where they need it, seals the volume again with Monolith's own APFS code, and puts the new
 // root hash and a static trust cache listing the added code into Preboot, where the patched iBoot stages
 // read them.
+import CryptoKit
 import FirmwarePatcher
 import Foundation
 import VPhoneCoreKit
@@ -34,7 +35,7 @@ public enum MonolithRestoredSystem {
         let oldRoot = try image.sealedRootHash(volume: "System")
         let system = try image.volume(named: "System")
 
-        let added = try patcher.applyOntoRestoredSystem(system, enabled: additions)
+        var added = try patcher.applyOntoRestoredSystem(system, enabled: additions)
         print("[monolith] \(added.count) cdhash(es) for the static trust cache")
 
         if additions.contains(FirmwareRestoreImagePatchSet.watchAudio) {
@@ -43,6 +44,10 @@ public enum MonolithRestoredSystem {
             do {
                 let cache = try DyldSharedCacheChunkSet(directory: work, architecture: "arm64e")
                 _ = try CustomFirmwareWatchAudioBudget.patchCache(in: cache)
+                // a re-attested cache file has a new CodeDirectory: the kernel maps it only if listed
+                for name in try FileManager.default.contentsOfDirectory(atPath: work.path) {
+                    added += try dyldCacheCDHashes(work.appendingPathComponent(name))
+                }
                 try dyld.writeBack()
             } catch {
                 try? FileManager.default.removeItem(at: work)
@@ -76,6 +81,37 @@ public enum MonolithRestoredSystem {
         try VPhoneAPFSSnapshot.rename(imageAt: vm.appendingPathComponent("Disk.img"))
         print("[monolith] System sealed again; Preboot updated (\(updated))")
     }
+}
+
+/// The CDHashes of a dyld shared cache file: its header's code signature (a SuperBlob) holds one
+/// CodeDirectory per hash type; each one's hash, truncated to 20 bytes, is what a trust cache lists.
+func dyldCacheCDHashes(_ url: URL) throws -> [Data] {
+    let handle = try FileHandle(forReadingFrom: url)
+    defer { try? handle.close() }
+    let header = try handle.read(upToCount: 0x40) ?? Data()
+    guard header.count >= 0x38, header.starts(with: Data("dyld_v1".utf8)) else { return [] }
+    func le64(_ d: Data, _ o: Int) -> UInt64 { d.subdata(in: o ..< o + 8).withUnsafeBytes { $0.loadUnaligned(as: UInt64.self) } }
+    let offset = le64(header, 0x28), size = le64(header, 0x30)
+    guard offset > 0, size > 0 else { return [] }
+    try handle.seek(toOffset: offset)
+    guard let blob = try handle.read(upToCount: Int(size)), blob.count >= 12 else { return [] }
+    func be32(_ o: Int) -> Int { Int(blob.subdata(in: o ..< o + 4).withUnsafeBytes { UInt32(bigEndian: $0.loadUnaligned(as: UInt32.self)) }) }
+    guard be32(0) == 0xfade0cc0 else { return [] }
+    var hashes: [Data] = []
+    for i in 0 ..< be32(8) {
+        let at = be32(12 + i * 8 + 4)
+        guard at + 40 <= blob.count, be32(at) == 0xfade0c02 else { continue }
+        let cd = blob.subdata(in: at ..< at + be32(at + 4))
+        let digest: Data
+        switch cd[cd.startIndex + 37] {
+        case 1: digest = Data(Insecure.SHA1.hash(data: cd))
+        case 2, 3: digest = Data(SHA256.hash(data: cd))
+        case 4: digest = Data(SHA384.hash(data: cd))
+        default: continue
+        }
+        hashes.append(digest.prefix(20))
+    }
+    return hashes
 }
 
 private extension Data {

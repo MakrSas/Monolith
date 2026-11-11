@@ -29,6 +29,16 @@ struct InstallView: View {
                     } else {
                     switch installer.phase {
                     case .idle:
+                        if let r = devices.resumable, !installer.busy {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("\(r.name) is not finished").font(.system(size: 18, weight: .bold))
+                                Text("Its restore is done; the last steps did not complete. They can run again without a new download or restore.")
+                                    .font(.system(size: 14)).foregroundStyle(Desk.dim)
+                                Button("Retry the last steps") { devices.resume() }.buttonStyle(DeskButtonStyle(enabled: jitReady))
+                                    .disabled(!jitReady).padding(.top, 4)
+                            }
+                            .padding(18).frame(maxWidth: .infinity, alignment: .leading).deskCard(radius: 30).padding(.bottom, 14)
+                        }
                         if !installer.busy { targetPicker }
                         if target == "mac" { chooser } else if let kind = GuestKind.all.first(where: { $0.id == target }) {
                             DeviceChooser(kind: kind, jitReady: jitReady)
@@ -444,6 +454,11 @@ private struct DeviceProgressView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("It did not work").font(.system(size: 22, weight: .bold))
                     Text(text).font(.system(size: 15))
+                    if installer.resumable != nil {
+                        Button("Retry the last steps") { installer.resume() }.buttonStyle(DeskButtonStyle()).padding(.top, 6)
+                        Text("The restored device is kept: no new download or restore.")
+                            .font(.system(size: 13)).foregroundStyle(Desk.dim)
+                    }
                     Button("Back") { installer.reset() }.buttonStyle(DeskButtonStyle()).padding(.top, 6)
                 }
                 .padding(18).deskCard(radius: 30).padding(.top, 8)

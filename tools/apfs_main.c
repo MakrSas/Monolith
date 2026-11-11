@@ -74,6 +74,14 @@ int main(int argc, char **argv) {
         printf("\n%s\n", r == 0 ? "sealed" : r > 0 ? "NOT sealed" : "error");
         return r ? 1 : 0;
     }
+    if (!strcmp(argv[3], "snap-retarget") && argc > 4) { /* snap-retarget NAME: the snapshot becomes the live state */
+        int idx = atoi(argv[2]);
+        apfs_close(c);
+        c = apfs_open_rw(argv[1], err, sizeof err);
+        if (!c) { fprintf(stderr, "apfs: %s\n", err); return 1; }
+        if (apfs_snapshot_retarget(apfs_volume(c, idx), argv[4]) || apfs_commit(c)) { fprintf(stderr, "apfs: %s\n", apfs_error(c)); return 1; }
+        return 0;
+    }
     if (!strcmp(argv[3], "reseal")) { /* reseal: seal a written sealed volume again */
         int idx = atoi(argv[2]);
         apfs_close(c);

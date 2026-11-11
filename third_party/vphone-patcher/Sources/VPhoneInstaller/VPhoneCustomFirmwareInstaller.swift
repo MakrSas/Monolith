@@ -393,21 +393,28 @@ public struct VPhoneCustomFirmwareInstaller {
         // it over the original: nothing is attached from the caller's folder,
         // and a failed install leaves the original untouched.
         let image: URL
+        #if os(macOS) // MONOLITH
         let cloned = try work.directory.clone(disk, to: "Disk.img")
-        if isOTAUpdate, !cloned {
+        let inPlaceAllowed = false
+        #else // MONOLITH: in place on iOS. A clone grows by the whole rewritten System (gigabytes a phone may
+        // not have); a failed install is retried from its last steps on the same restored disk instead.
+        let cloned = false
+        let inPlaceAllowed = true
+        #endif
+        if isOTAUpdate, !cloned, !inPlaceAllowed {
             throw ValidationError("The OTA update needs a private APFS disk clone; the original disk was left untouched.")
         }
         if !effectiveEnabled.union(receiptGuest ?? priorFallback).isDisjoint(with: [
             FirmwareGuestSystemPatchSet.paravirtGPUCompilerCache,
             FirmwareGuestSystemPatchSet.glesDepthClip,
-        ]), !cloned {
+        ]), !cloned, !inPlaceAllowed {
             throw ValidationError("GPU compiler cache versioning needs a private APFS disk clone so the compiler and its cache identity update together; the original disk was left untouched.")
         }
         if device.usesTVOS {
             // A paired dyld edit must never fall back to mutating the live disk.
             // Its errors propagate below, so this clone is committed only after
             // the whole install succeeds.
-            try CustomFirmwareTVTPROInstallation.requirePrivateClone(cloned)
+            try CustomFirmwareTVTPROInstallation.requirePrivateClone(cloned || inPlaceAllowed)
         }
         if cloned {
             image = work.file("Disk.img")

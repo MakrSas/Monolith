@@ -91,7 +91,56 @@ final class DeviceInstaller: ObservableObject {
         return VPhoneFirmwareCatalog.pairings(for: kind.id)
     }
 
-    func reset() { phase = .idle; stage = 0; stepProgress = 0 }
+    func reset() { phase = .idle; stage = 0; stepProgress = 0; resumable = Self.loadResume() }
+
+    /// An install whose restore finished: its last steps (vphone's installer, then Monolith's machine) can
+    /// run again on the same restored machine, after a failure or the app being closed, without a new
+    /// download or restore.
+    struct Resume: Codable, Equatable {
+        let kind: String, osName: String, name: String, cpus: Int, vm: String, ecid: UInt64
+    }
+    @Published var resumable: Resume? = DeviceInstaller.loadResume()
+    nonisolated static var resumeFile: URL { root.appendingPathComponent("resume.json") }
+    nonisolated static func loadResume() -> Resume? {
+        guard let data = try? Data(contentsOf: resumeFile), let r = try? JSONDecoder().decode(Resume.self, from: data),
+              FileManager.default.fileExists(atPath: root.appendingPathComponent("machines/\(r.vm)/Disk.img").path) else { return nil }
+        return r
+    }
+    private func saveResume(_ r: Resume?) {
+        if let r, let data = try? JSONEncoder().encode(r) { try? data.write(to: Self.resumeFile) }
+        else { try? FileManager.default.removeItem(at: Self.resumeFile) }
+        resumable = r
+    }
+
+    /// The last steps again, on the machine the restore left.
+    func resume() {
+        guard !busy, let r = resumable, let kind = GuestKind.all.first(where: { $0.id == r.kind }) else { return }
+        phase = .running
+        stage = 3
+        stepProgress = 0
+        title = "\(r.osName) on this \(Device.name)"
+        UIApplication.shared.isIdleTimerDisabled = true
+        let grace = UIApplication.shared.beginBackgroundTask(withName: "Monolith device install") {}
+        Task {
+            defer {
+                UIApplication.shared.isIdleTimerDisabled = false
+                UIApplication.shared.endBackgroundTask(grace)
+            }
+            do {
+                guard let resources = Self.resources else { throw message("This build has no vphone resources.") }
+                setenv("VPHONE_ROOT", Self.root.path, 1)
+                VPhoneResources.monolithBase = resources
+                let vm = Self.root.appendingPathComponent("machines/\(r.vm)", isDirectory: true)
+                HengeLog.log("device-install", "retrying the last steps of \(r.name) (\(r.vm))")
+                let mac = VirtualMac(name: r.name, ecid: r.ecid, seed: 0, ramMB: kind.ramMB, diskBytes: 64 << 30)
+                let made = try await finish(kind, osName: r.osName, vm: vm, mac: mac, resources: resources)
+                phase = .done("\(made.name) is in Devices.")
+            } catch {
+                HengeLog.log("device-install", "failed: \(error)")
+                phase = .failed("\(error)")
+            }
+        }
+    }
 
     func start(_ kind: GuestKind, _ pairing: VPhoneFirmwarePairing, name: String, cpus: Int) {
         guard !busy else { return }
@@ -126,6 +175,8 @@ final class DeviceInstaller: ObservableObject {
         VPhoneResources.monolithBase = resources
         // vphone machines only live while an install runs (a finished one moves into Monolith's),
         // so any left here are from an install that failed or was killed; so are half downloads.
+        saveResume(nil)
+        Self.removeInstallerWork()
         for leftover in (try? FileManager.default.contentsOfDirectory(at: library, includingPropertiesForKeys: nil)) ?? []
         where leftover.lastPathComponent.hasPrefix("m-") {
             HengeLog.log("device-install", "removing the unfinished \(leftover.lastPathComponent)")
@@ -189,9 +240,24 @@ final class DeviceInstaller: ObservableObject {
             if (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0) ?? 0 > 1 << 30 { try? FileManager.default.removeItem(at: file) }
         }
 
+        // From here the restored machine is kept for a retry of the last steps.
+        saveResume(Resume(kind: kind.id, osName: pairing.iosName, name: name, cpus: cpus, vm: slug, ecid: ecid))
+        return try await finish(kind, osName: pairing.iosName, vm: vm, mac: mac, resources: resources)
+    }
+
+    /// vphone's installer's leftover work folders (each can hold a clone of a disk image).
+    nonisolated static func removeInstallerWork() {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+        for item in (try? FileManager.default.contentsOfDirectory(at: tmp, includingPropertiesForKeys: nil)) ?? []
+        where item.lastPathComponent.hasPrefix("vphone-cfw.") { try? FileManager.default.removeItem(at: item) }
+    }
+
+    /// Steps 4 and 5: vphone's installer into the restored disk, then Monolith's machine.
+    private func finish(_ kind: GuestKind, osName: String, vm: URL, mac: VirtualMac, resources: URL) async throws -> VirtualMac {
         // 4. vphone's installer: vphoned, its daemons and libraries, the guest patches, into the disk image.
         stage = 3
         stepProgress = 0
+        Self.removeInstallerWork()
         try await off {
             let tmp = realpath(NSTemporaryDirectory(), nil).map { String(cString: $0) } ?? NSTemporaryDirectory()
             if kind.sealsAfterRestore {
@@ -215,11 +281,12 @@ final class DeviceInstaller: ObservableObject {
                 try? fm.removeItem(at: to)
                 try fm.moveItem(at: vm.appendingPathComponent(from), to: to)
             }
-            try pairing.iosName.write(to: made.directory.appendingPathComponent(Machines.installedMarker), atomically: true, encoding: .utf8)
+            try osName.write(to: made.directory.appendingPathComponent(Machines.installedMarker), atomically: true, encoding: .utf8)
             try? fm.removeItem(at: vm)
         }
-        made.osName = pairing.iosName
+        made.osName = osName
         Machines.shared.add(made)
+        saveResume(nil)
         HengeLog.log("device-install", "\(made.name): installed, added to Devices")
         return made
     }

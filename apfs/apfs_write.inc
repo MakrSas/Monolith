@@ -1437,3 +1437,99 @@ int apfs_link(ApfsVolume *v, uint64_t id, uint64_t parent, const char *name) {
     wr32(f.v + 56, rd32(f.v + 56) + 1);
     return inode_put(v, f.v, f.vl, id, 1);
 }
+
+/* ---- a snapshot moved to the live state ---- */
+
+static int raw_u64(const uint8_t *a, uint16_t al, const uint8_t *b, uint16_t bl, ApfsVolume *v) {
+    (void)al; (void)bl; (void)v;
+    return cmp_u64(rd64(a), rd64(b));
+}
+
+typedef struct { uint64_t hdr; } HdrMatch;
+static int match_hdr(const uint8_t *k, uint16_t kl, void *ctx) { (void)kl; return rd64(k) == ((HdrMatch *)ctx)->hdr; }
+
+typedef struct { uint64_t xid; uint8_t v[1024]; uint16_t vl; int found; } SnapMetaFind;
+static int snapmeta_cb(const uint8_t *k, uint16_t kl, const uint8_t *v, uint16_t vl, void *user) {
+    (void)kl;
+    SnapMetaFind *f = user;
+    uint64_t h = rd64(k);
+    if ((uint8_t)(h >> OBJ_TYPE_SHIFT) != 1 || vl < 50 || vl > sizeof f->v) return 0;
+    f->xid = h & OBJ_ID_MASK; memcpy(f->v, v, vl); f->vl = vl; f->found = 1;
+    return 0;
+}
+
+/* The volume's (only) snapshot made a snapshot of the live volume as it is now, named `name`: a copy of the
+   live superblock, its metadata and name records and its object-map snapshot keyed by the current
+   transaction. For a resealed system: the boot chain mounts the snapshot named after the root hash it is
+   given, and checks it. The blocks only the old snapshot used are left allocated. */
+int apfs_snapshot_retarget(ApfsVolume *v, const char *name) {
+    ApfsContainer *c = v->c;
+    if (!c->w || !v->snap_meta) return -1;
+    if (cache_trim(c)) return werr(c, "write failed");
+    SnapMetaFind f = {0};
+    Tree t = {c, v->snap_meta, 0, 0, 0, 0, snap_cmp, NULL, 0};
+    if (tree_walk(&t, NULL, snapmeta_cb, &f) < 0 || !f.found) return werr(c, "no snapshot to move");
+    uint64_t old_xid = f.xid, new_xid = c->xid;
+    size_t nlen = strlen(name) + 1;
+    if (nlen > 255) return werr(c, "snapshot name too long");
+
+    /* the superblock copy */
+    uint8_t *old = malloc(c->bs);
+    if (!old || read_block(c, rd64(f.v + 8), old)) { free(old); return werr(c, "cannot read the snapshot's superblock"); }
+    uint64_t np;
+    if (alloc_block(c, v, &np)) { free(old); return -1; }
+    uint8_t *sb = cache_get(c, np, 1, 0, KIND_OBJECT);
+    if (!sb || read_block(c, v->sb_paddr, sb)) { free(old); return werr(c, "cannot read the volume superblock"); }
+    wr64(sb + 8, rd64(old + 8) == rd64(f.v + 8) ? np : rd64(old + 8));
+    wr64(sb + 16, new_xid);
+    wr32(sb + 24, rd32(old + 24));
+    wr32(sb + 28, rd32(old + 28));
+    wr64(sb + 136, v->root_tree);
+    if (v->fext_root) wr64(sb + 1032, v->fext_root);
+    free(old);
+
+    /* its records in the snapshot metadata tree */
+    WTree st = {c, v, &v->snap_meta, 0, 0, 0, 0, raw_fs, 0, OBJECT_TYPE_BTREE_NODE, 0x10, 0, 0};
+    uint8_t k[512];
+    HdrMatch mm = {old_xid | (uint64_t)1 << OBJ_TYPE_SHIFT};
+    wr64(k, mm.hdr);
+    if (wdelete(&st, k, 8, match_hdr, &mm) < 0) return -1;
+    HdrMatch nm = {OBJ_ID_MASK | (uint64_t)11 << OBJ_TYPE_SHIFT};
+    wr64(k, nm.hdr); wr16(k + 8, 0);
+    if (wdelete(&st, k, 10, match_hdr, &nm) < 0) return -1;
+    uint8_t val[1024];
+    memcpy(val, f.v, 48);
+    wr64(val + 8, np);
+    wr64(val + 24, now_ns());
+    wr16(val + 48, (uint16_t)nlen);
+    memcpy(val + 50, name, nlen);
+    wr64(k, new_xid | (uint64_t)1 << OBJ_TYPE_SHIFT);
+    if (winsert(&st, k, 8, val, (uint16_t)(50 + nlen), 1)) return -1;
+    wr64(k, nm.hdr); wr16(k + 8, (uint16_t)nlen); memcpy(k + 10, name, nlen);
+    uint8_t xv[8]; wr64(xv, new_xid);
+    if (winsert(&st, k, (uint16_t)(10 + nlen), xv, 8, 1)) return -1;
+
+    /* its object-map snapshot */
+    uint8_t *vsb = malloc(c->bs);
+    if (!vsb || read_block(c, v->sb_paddr, vsb)) { free(vsb); return -1; }
+    uint64_t omp = rd64(vsb + 128);
+    free(vsb);
+    uint8_t *om = cache_get(c, omp, 1, 1, KIND_OBJECT);
+    if (!om) return -1;
+    uint64_t sroot = rd64(om + 56);
+    if (sroot) {
+        WTree ot = {c, v, &sroot, 0, 0, 8, 16, raw_u64, 0, OBJECT_TYPE_BTREE_NODE, 0x13, 0, 0};
+        HdrMatch om_old = {old_xid};
+        wr64(k, old_xid);
+        if (wdelete(&ot, k, 8, match_hdr, &om_old) < 0) return -1;
+        uint8_t ov[16] = {0};
+        wr64(k, new_xid);
+        if (winsert(&ot, k, 8, ov, 16, 1)) return -1;
+        om = cache_get(c, omp, 1, 1, KIND_OBJECT);
+        wr64(om + 56, sroot);
+    }
+    wr64(om + 64, new_xid);
+    v->snap_xid_max = new_xid;
+    if (debug_on()) fprintf(stderr, "apfs: %s: snapshot %llu moved to %llu as %s\n", v->name, (unsigned long long)old_xid, (unsigned long long)new_xid, name);
+    return 0;
+}
