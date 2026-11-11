@@ -1,3 +1,4 @@
+import UIKit
 import Foundation
 import VPhoneCoreKit
 import VPhoneInstaller
@@ -65,7 +66,13 @@ final class DeviceInstaller: ObservableObject {
         stage = 0
         stepProgress = 0
         title = "\(pairing.iosName) on this \(Device.name)"
+        UIApplication.shared.isIdleTimerDisabled = true // a locked screen suspends the app and cuts the restore's connection
+        let grace = UIApplication.shared.beginBackgroundTask(withName: "Monolith device install") {}
         Task {
+            defer {
+                UIApplication.shared.isIdleTimerDisabled = false
+                UIApplication.shared.endBackgroundTask(grace)
+            }
             do {
                 let mac = try await run(kind, pairing, name: name, cpus: cpus)
                 phase = .done("\(mac.name) is in Devices.")
