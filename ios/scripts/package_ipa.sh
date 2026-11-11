@@ -17,7 +17,11 @@ cd "$IOS"
 VR="${VPHONE_RESOURCES:-$HOME/Documents/Coding/vphone/VPhone.bundle/Contents/Resources}"
 if [ -d "$VR/guest-resources" ]; then
     mkdir -p "$IOS/Henge/VPhoneResources"
-    rsync -a --delete --delete-excluded --exclude '*.lproj' --exclude 'GhosttyKit_*' --exclude 'Licenses' "$VR/" "$IOS/Henge/VPhoneResources/"
+    rsync -a --delete --delete-excluded --exclude '*.lproj' --exclude 'GhosttyKit_*' --exclude 'Licenses' --exclude 'guest-resources' "$VR/" "$IOS/Henge/VPhoneResources/"
+    # The guest's binaries go in as one Apple Archive: sideloaders re-sign every Mach-O in an app,
+    # giving these dylibs the app's entitlements, and the guest's AMFI then refuses them.
+    rm -f "$IOS/Henge/VPhoneResources/guest-resources.aar"
+    aa archive -d "$VR/guest-resources" -o "$IOS/Henge/VPhoneResources/guest-resources.aar"
 else
     echo "warning: no vphone resources at $VR: devices other than a Mac cannot be installed" >&2
     mkdir -p "$IOS/Henge/VPhoneResources"

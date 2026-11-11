@@ -1,3 +1,5 @@
+import System
+import AppleArchive
 import UIKit
 import Foundation
 import VPhoneCoreKit
@@ -46,10 +48,39 @@ final class DeviceInstaller: ObservableObject {
 
     var busy: Bool { phase == .running }
 
-    static var resources: URL? { Bundle.main.url(forResource: "VPhoneResources", withExtension: nil) }
+    static var resources: URL? { try? unpackedResources() }
+
+    /// vphone's resources as it expects them: the app's copy, but with guest-resources unpacked from
+    /// its archive (shipped packed so a sideloader's re-signing cannot touch the guest's binaries).
+    nonisolated static func unpackedResources() throws -> URL? {
+        guard let bundled = Bundle.main.url(forResource: "VPhoneResources", withExtension: nil) else { return nil }
+        let archive = bundled.appendingPathComponent("guest-resources.aar")
+        guard FileManager.default.fileExists(atPath: archive.path) else { return bundled }
+        let fm = FileManager.default
+        let out = root.appendingPathComponent("resources", isDirectory: true)
+        let size = (try? archive.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        let stamp = out.appendingPathComponent(".stamp"), want = "\(Bundle.main.bundleURL.path) \(size)"
+        if (try? String(contentsOf: stamp, encoding: .utf8)) == want { return out }
+        try? fm.removeItem(at: out)
+        try fm.createDirectory(at: out, withIntermediateDirectories: true)
+        for item in try fm.contentsOfDirectory(at: bundled, includingPropertiesForKeys: nil) where item.lastPathComponent != "guest-resources.aar" {
+            try fm.copyItem(at: item, to: out.appendingPathComponent(item.lastPathComponent))
+        }
+        let guest = out.appendingPathComponent("guest-resources", isDirectory: true)
+        try fm.createDirectory(at: guest, withIntermediateDirectories: true)
+        guard let file = ArchiveByteStream.fileStream(path: FilePath(archive.path), mode: .readOnly, options: [], permissions: FilePermissions(rawValue: 0o644)),
+              let decompress = ArchiveByteStream.decompressionStream(readingFrom: file),
+              let decode = ArchiveStream.decodeStream(readingFrom: decompress),
+              let extract = ArchiveStream.extractStream(extractingTo: FilePath(guest.path), flags: [.ignoreOperationNotPermitted])
+        else { throw NSError(domain: "Henge", code: 3, userInfo: [NSLocalizedDescriptionKey: "Cannot open the guest resources archive."]) }
+        defer { try? extract.close(); try? decode.close(); try? decompress.close(); try? file.close() }
+        _ = try ArchiveStream.process(readingFrom: decode, writingTo: extract)
+        try want.write(to: stamp, atomically: true, encoding: .utf8)
+        return out
+    }
 
     /// vphone's own library: machines being made, and its download cache, in this app's storage.
-    static var root: URL {
+    nonisolated static var root: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("vphone", isDirectory: true)
     }
 
