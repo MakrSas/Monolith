@@ -1,106 +1,124 @@
 <p align="center">
-  <img src="docs/icon.png" width="120" height="120" alt="Henge">
+  <img src="docs/icon.png" width="120" height="120" alt="Monolith">
 </p>
 
-<h1 align="center">Henge</h1>
+<h1 align="center">Monolith</h1>
 
-<p align="center">macOS on your iPhone and iPad.</p>
+<p align="center">Apple's devices on your iPhone and iPad: HomePod, HomeView, Apple Watch, Apple TV and the Mac.</p>
 
 <p align="center">
   <a href="#install">Install</a>
   ·
-  <a href="docs/architecture.md">How it works</a>
+  <a href="#devices">Devices</a>
   ·
-  <a href="https://itslevii.dev">Website</a>
+  <a href="docs/vphone-transfer.md">Move a device from vphone</a>
   ·
-  <a href="https://github.com/Leviidev/Henge/releases">Releases</a>
+  <a href="https://github.com/MakrSas/Monolith/releases">Releases</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Leviidev/Henge/releases"><img src="https://img.shields.io/github/downloads/Leviidev/Henge/total?style=flat-square&color=2E6BFF&labelColor=111111" alt="Downloads"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/Leviidev/Henge?style=flat-square&color=2E6BFF&labelColor=111111" alt="GPL-2.0-or-later"></a>
+  <a href="https://github.com/MakrSas/Monolith/releases"><img src="https://img.shields.io/github/v/release/MakrSas/Monolith?include_prereleases&style=flat-square&color=2E6BFF&labelColor=111111" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/MakrSas/Monolith?style=flat-square&color=2E6BFF&labelColor=111111" alt="GPL-2.0-or-later"></a>
 </p>
 
-> **Monolith** is a fork of Henge that also runs Apple's other devices, made the way
-> [vphone](https://github.com/Lakr233/vphone-cli) makes them on a Mac, on the iPhone and iPad.
-> Beta 0.3.0: **HomePod mini and HomeView install right on the phone, no Mac needed** (Install tab).
-> Apple Watch, Apple TV and iPhone guests made in vphone on a Mac can be moved to the phone:
-> [docs/vphone-transfer.md](docs/vphone-transfer.md). Releases: [MakrSas/Monolith](https://github.com/MakrSas/Monolith/releases).
-> Everything below about macOS is Henge's and still applies.
+Monolith is a fork of [Henge](https://github.com/Leviidev/Henge). It keeps everything Henge does for macOS
+and adds Apple's other devices, the ones [vphone](https://github.com/Lakr233/vphone-cli) builds on a Mac,
+running on the phone in Monolith's own emulator.
 
-Download macOS, install it on the device, and use it.
+**This is a beta.** HomePod mini and HomeView install and run on the phone; read [Known issues](#known-issues)
+before you start.
 
-- **Own emulator** — iOS gives apps no hypervisor, so Henge runs the Mac's arm64 code through its own JIT, with its own MMU and devices. It doesn't use QEMU or Virtualization.framework.
-- **Installs on the device** — Henge downloads Apple's restore image and restores it the way a Mac does. No Mac needed, and nothing is decrypted or patched.
-- **Graphics** — macOS draws through a virtual GPU, and Henge replays its commands with Metal. Safari and Electron apps like Discord draw on it.
-- **Touch** — The screen is a Magic Trackpad 2: two fingers to scroll, and the Mac's own gestures work on it — three-finger swipes for Spaces and Mission Control and more. The volume buttons are its buttons: up clicks, down right-clicks, hold to drag. Esc, Tab, Control, Option and Command sit above the keyboard.
-- **Keyboard and mouse** — On iPad, a Magic Keyboard or a Bluetooth keyboard and mouse drive the Mac directly.
-- **External display** — During a Mac session, connect a display with a video-capable USB-C cable or a USB-C/HDMI dock. The mode activates automatically: the monitor shows the Mac, while the iPhone or iPad keeps its trackpad and keyboard controls. Disconnect to return the image to the device. The existing guest resolution is preserved. On iOS 17–26 the same happens through an older iOS route, not yet tried on hardware; outside a Mac session the display mirrors the device. USB-C video is user-confirmed on an iPhone 17 Pro running iOS 27 (development build 0.1/2).
-- **Sharing** — Copy and paste between macOS and the device, and a shared folder that shows up in Files and on the Mac.
-- **Fits the screen** — On iPad, a new Mac gets a screen the shape of the iPad's, so there are no black bars.
+## Devices
 
-On an iPhone 17 Pro, macOS reaches the lock screen in about 15 seconds. Discord installs, opens in about 15 seconds, logs in and sends messages.
+| Device | On the phone | Notes |
+| --- | --- | --- |
+| **HomePod mini** | Installs in the app | The top surface is the screen: touch to play or pause, + and − for volume. It shows up as an AirPlay speaker on your Wi-Fi. |
+| **HomeView** | Installs in the app | Pull down from the top-right corner for Control Center. The **Apps** button under the screen opens any app. |
+| **Apple Watch** | Move from vphone | The Digital Crown and side button are under the screen. Installing in the app is not ready yet. |
+| **Apple TV, iPhone** | Move from vphone | Installing in the app is not ready yet. |
+| **Mac** | Installs in the app | Henge's macOS support, unchanged: see [macOS](#macos). |
+
+### Installing on the phone, no Mac needed
+
+Open the **Install** tab, pick HomePod mini or HomeView, choose a release and a name, and keep Monolith open
+with the phone plugged in. Monolith:
+
+1. downloads Apple's firmware for the device and the cloudOS it borrows its boot chain from (progress shows
+   size, speed and time left; downloads are kept for the next install);
+2. patches the boot chain and kernel;
+3. restores the device in its own engine;
+4. installs vphone's additions (its guest agent, launch daemons, patches) into the device's disk.
+
+vphone's pipeline runs inside the app: the macOS tools it relies on (`diskutil`, `mount_apfs`, `aa`,
+`codesign`, …) are answered by Monolith's own code, including a clean-room APFS reader and writer (`apfs/`).
+
+If an install fails after the restore, or Monolith is closed, the restored device is kept: **Retry the last
+steps** finishes it without a new download or restore. **Settings → Storage** lists what Monolith keeps, with
+sizes, so you can delete downloads and leftovers.
+
+### Moving a device from vphone on a Mac
+
+A device that runs in vphone can be packed on the Mac with `tools/export_vphone.sh` and brought to the phone
+through Finder or the Files app. See [docs/vphone-transfer.md](docs/vphone-transfer.md).
 
 ## Install
 
-Sideload `Henge.ipa` from [Releases](https://github.com/Leviidev/Henge/releases) with SideStore or AltStore, or install `Henge.tipa` with TrollStore or TrollStore Lite. To get updates in SideStore or AltStore, add Henge's source, `https://raw.githubusercontent.com/Leviidev/Henge/main/repo.json`, or `https://itslevii.dev/repo.json` for all of Leviidev's apps. iOS or iPadOS 17 or later, on an A14 or M1 chip or newer. So far it's tested only on an iPhone 17 Pro: iPad support is new and hasn't run on a real iPad yet.
+Sideload `Monolith.ipa` from [Releases](https://github.com/MakrSas/Monolith/releases) with SideStore or
+AltStore. Its bundle identifier is `com.monolith.app`, so it installs beside Henge.
 
-- **JIT** is required: StikDebug, TrollStore (which stops at iOS 17.0), TrollStore Lite (which needs a jailbreak), a jailbreak on its own, or the StikJIT helper built into Henge (iOS 26 or later).
-- **Storage:** about 43 GB free for macOS Sequoia. That's 17 GB for the download, which you can delete afterwards, and 26 GB for the Mac.
-- **Memory:** a Mac gets 4, 6 or 8 GB. Sign Henge with the increased memory limit entitlement if your certificate has it.
+- **iOS or iPadOS 17 or later**, on an A14 or M1 chip or newer. Tested on an iPhone 15.
+- **JIT is required**: StikDebug, the StikJIT helper built into Monolith (iOS 26 or later), TrollStore, or a
+  jailbreak. Monolith pairs for JIT as *Monolith*, so it does not disturb Henge's pairing.
+- **Storage**: about 20 GB free while a HomePod or HomeView installs; a Mac needs about 43 GB.
+- **Memory**: sign with the increased memory limit entitlement if your certificate has it.
 
-Then open the Install tab, pick macOS Sequoia 15.6.1, and keep Henge open with the device plugged in. Tahoe 26.6.2 and macOS 27.2 are offered too: both install and run on an iPhone 17 Pro, though Tahoe's first setup is slow and macOS 27 is the slowest (Safari's pages may stay blank on it). Sonoma 14.6.1 and Ventura 13.6 are smaller downloads (14.1 and 12.3 GB) for devices short on storage: they install, set up, and run Safari (both tested on an iPhone 17 Pro). Monterey isn't offered yet: it installs, but its desktop never appears.
+## Known issues
 
-## Sharing with the Mac
+- **HomeView**: Settings and Control Center open, then close; app icons show as placeholders; Liquid Glass
+  lowers the frame rate.
+- **HomePod**: AirPlay connects, but there is no sound yet.
+- **Apple Watch, Apple TV and iPhone** cannot be installed in the app yet (shown as *Soon*): move them from
+  vphone instead.
+- After an install, **quit and reopen Monolith before starting the device**: the install keeps memory the
+  device then needs.
+- A device's **first start takes several minutes**.
+- Everything in [Henge's known limits](https://github.com/Leviidev/Henge#known-limits) for macOS applies.
 
-Do this once for each Mac: open Terminal on the Mac, then in Henge open Details and tap **Type the Set Up Command**. Press Return on the Mac, and choose Allow when macOS asks about `henge-agent` and local networks. It needs the Mac's keyboard layout to be U.S.
+## macOS
 
-Then a Henge folder in the Mac's home folder is the same folder as Files › Henge › Shared. What you copy on the Mac is copied on the device too, and the paste button pastes from the device into the Mac.
-
-## Known limits
-
-- Signing in to an Apple Account inside macOS fails with a verification error.
-- Graphics are tested on macOS's own apps, Chrome, Firefox, VS Code and Discord. Other apps may draw wrongly.
-- On macOS Sonoma, switching to a dynamic wallpaper (such as Sonoma) can stop the screen updating; opening any app brings it back. On Ventura, the Calendar icon in the Dock is missing its date.
-- For the first few minutes after you log in, macOS is busy starting up in the background, so apps open more slowly.
-- Only one Mac can start per launch. Quit Henge and open it again to start another, and to start one again after restarting or shutting down macOS.
-- iPadOS keeps some keyboard shortcuts for itself, such as Command-Tab.
-- It's emulation, so it runs slower than a real Mac.
-
-## Screenshots
-
-<table>
-  <tr>
-    <td align="center" colspan="3"><img src="Screenshots/ipad.jpg" alt="Discord on an iPad"><br><sub>iPad</sub></td>
-  </tr>
-  <tr>
-    <td align="center" width="33%"><img src="Screenshots/macs.png" alt="Macs"><br><sub>Macs</sub></td>
-    <td align="center" width="33%"><img src="Screenshots/trackpad.png" alt="Trackpad"><br><sub>Trackpad</sub></td>
-    <td align="center" width="33%"><img src="Screenshots/install.png" alt="Install macOS"><br><sub>Install macOS</sub></td>
-  </tr>
-</table>
-
-<sub>Captured on a Mac: the app's own screens with sample data, at iPad and iPhone sizes, showing a frame from Henge's renderer.</sub>
+Everything Henge does is here: download macOS, install it on the device, and use it, with its own JIT, its own
+virtual GPU replayed on Metal, a Magic Trackpad 2 on the touch screen, keyboard and mouse on iPad, an external
+display, copy and paste and a shared folder with the Mac, Instant Resume, and Mac apps without macOS. See
+[Henge's README](https://github.com/Leviidev/Henge#readme) and [docs/architecture.md](docs/architecture.md).
 
 ## Building
 
-To use Henge, install the [latest release](https://github.com/Leviidev/Henge/releases). Every change lands on `main` as it's made, so `main` can be unfinished between releases.
-
-On a Mac with Xcode 27 or later and `xcodegen`. Henge takes StikJIT, on-device pairing, libslirp and glib from a built [Husk](https://github.com/Leviidev/Husk) checkout at `~/Documents/Coding/Husk` (set `HUSK` to use another path):
+On a Mac with Xcode 27 or later and `xcodegen`. Like Henge, Monolith takes StikJIT, on-device pairing,
+libslirp and glib from a built [Husk](https://github.com/Leviidev/Husk) checkout at `~/Documents/Coding/Husk`
+(set `HUSK` to use another path). The vphone devices also need vphone's resources: a built vphone app, whose
+`Contents/Resources` the packaging script copies in (set `VPHONE_RESOURCES` to its path).
 
 ```bash
 ios/scripts/fetch_deps.sh
 tools/build_ios_restore.sh
 make ios-lib
-ios/scripts/package_ipa.sh
+VPHONE_RESOURCES=/path/to/VPhone.app/Contents/Resources ios/scripts/package_ipa.sh
 ```
 
-That produces `~/Desktop/Henge.ipa`, and `package_ipa.sh --trollstore` writes `Henge.tipa`.
+That produces `~/Desktop/Monolith.ipa`. `make` builds the engine for the Mac (`build/hengevm`), `make test`
+runs its tests, and `build/apfs` is the APFS tool.
 
-`make` builds the engine for the Mac, `build/hengevm`, and `make test` runs its tests.
+## Credits
+
+- [Henge](https://github.com/Leviidev/Henge) by Leviidev and its contributors: the emulator, macOS support and
+  the app this is built on. Their history is kept in this repository.
+- [vphone](https://github.com/Lakr233/vphone-cli) by Lakr233 and its contributors: the device firmware
+  pipeline, patches and guest agent Monolith runs on the phone (`third_party/vphone-patcher`).
 
 ## Licence
 
-GPL-2.0-or-later. Henge compiles in usbmuxd (GPLv2 or GPLv3) and code from Husk (GPL-2.0-or-later), so the shipped binary is a combined GPL work. It cannot go on the App Store. See [docs/licensing.md](docs/licensing.md).
+GPL-2.0-or-later, as Henge. The shipped binary is a combined GPL work (usbmuxd, Husk) and cannot go on the App
+Store. See [docs/licensing.md](docs/licensing.md).
 
-macOS and the Mac's boot ROM are Apple's and aren't part of Henge. Henge downloads both from Apple when you install.
+The devices' firmware, macOS and the boot ROMs are Apple's and are not part of Monolith: it downloads them
+from Apple when you install.
