@@ -305,6 +305,7 @@ static int seal_drop_infos(WTree *t, uint64_t id) {
 int apfs_reseal(ApfsVolume *v, uint8_t root_hash[32]) {
     ApfsContainer *c = v->c;
     if (!c->w || !(v->incompat & APFS_INCOMPAT_SEALED_VOLUME)) return -1;
+    if (cache_trim(c)) return werr(c, "write failed");
     SealScan s = {0};
     Tree t = fs_tree(v);
     if (tree_walk(&t, NULL, seal_scan_cb, &s) < 0 || s.err) { free(s.s); free(s.f); return werr(c, "reseal: cannot scan the volume"); }

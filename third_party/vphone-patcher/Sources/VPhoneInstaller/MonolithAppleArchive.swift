@@ -36,9 +36,10 @@ public enum MonolithAppleArchive {
             var data = Data()
             if case let .blob(_, size, _) = header.field(forKey: ArchiveHeader.FieldKey("DAT")) {
                 let buffer = UnsafeMutableRawBufferPointer.allocate(byteCount: Int(size), alignment: 16)
-                defer { buffer.deallocate() }
-                try decoder.readBlob(key: ArchiveHeader.FieldKey("DAT"), into: buffer)
-                data = Data(buffer)
+                do { try decoder.readBlob(key: ArchiveHeader.FieldKey("DAT"), into: buffer) } catch { buffer.deallocate(); throw error }
+                // the buffer becomes the Data, not copied into one: a file is held once
+                data = size == 0 ? Data() : Data(bytesNoCopy: buffer.baseAddress!, count: Int(size), deallocator: .custom { p, _ in p.deallocate() })
+                if size == 0 { buffer.deallocate() }
             }
             if let filter, !filter(path) { continue }
             if path.isEmpty { // the archive's root: the directory itself

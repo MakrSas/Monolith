@@ -32,6 +32,7 @@ typedef struct Writer {
     uint64_t spaceman;      /* paddr of the space manager */
     uint32_t spaceman_blocks;
     char err[256];
+    uint64_t cached;        /* bytes held by the cache */
 } Writer;
 
 static CEnt *cache_find(ApfsContainer *c, uint64_t paddr) {
@@ -51,6 +52,7 @@ static uint8_t *cache_get(ApfsContainer *c, uint64_t paddr, uint32_t n, int load
     e->paddr = paddr;
     e->nblocks = n;
     e->b = calloc(n, c->bs);
+    w->cached += (uint64_t)n * c->bs;
     if (load && pread(c->fd, e->b, (size_t)n * c->bs, (off_t)(c->base + paddr * c->bs)) != (ssize_t)n * c->bs) {
         free(e->b);
         free(e);
@@ -77,6 +79,41 @@ const char *apfs_error(ApfsContainer *c) { return c->w ? c->w->err : ""; }
 static inline void wr16(uint8_t *p, uint16_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); }
 static inline void wr32(uint8_t *p, uint32_t v) { for (int i = 0; i < 4; i++) p[i] = (uint8_t)(v >> (8 * i)); }
 static inline void wr64(uint8_t *p, uint64_t v) { for (int i = 0; i < 8; i++) p[i] = (uint8_t)(v >> (8 * i)); }
+
+/* A block as it goes to disk: an object checksummed, a headerless node's header zero. */
+static int cache_write(ApfsContainer *c, CEnt *e) {
+    size_t len = (size_t)e->nblocks * c->bs;
+    if (e->kind == KIND_OBJECT) wr64(e->b, fletcher64(e->b, len));
+    else if (e->kind == KIND_HEADERLESS) memset(e->b, 0, 32);
+    if (pwrite(c->fd, e->b, len, (off_t)(c->base + e->paddr * c->bs)) != (ssize_t)len) return -1;
+    e->dirty = 0;
+    return 0;
+}
+
+/* Keeps the cache's memory bounded: past the limit, every block is written and dropped (the transaction
+   is in place, so writing early is what the commit would do). Only between whole operations: nothing may
+   hold a pointer into the cache then. */
+#define CACHE_LIMIT (64ull << 20)
+static int cache_trim(ApfsContainer *c) {
+    Writer *w = c->w;
+    static uint64_t limit;
+    if (!limit) { const char *e = getenv("APFS_CACHE_LIMIT"); limit = e ? strtoull(e, NULL, 0) : CACHE_LIMIT; }
+    if (!w || w->cached < limit) return 0;
+    for (int i = 0; i < CACHE_BUCKETS; i++) {
+        CEnt *e = w->bucket[i];
+        w->bucket[i] = NULL;
+        while (e) {
+            CEnt *next = e->next;
+            if (e->dirty && cache_write(c, e)) return -1;
+            free(e->b);
+            free(e);
+            e = next;
+        }
+    }
+    w->cached = 0;
+    return 0;
+}
+
 
 static uint64_t now_ns(void) {
     struct timespec ts;
@@ -664,12 +701,7 @@ int apfs_commit(ApfsContainer *c) {
     if (!w) return -1;
     for (int i = 0; i < CACHE_BUCKETS; i++)
         for (CEnt *e = w->bucket[i]; e; e = e->next) {
-            if (!e->dirty) continue;
-            size_t len = (size_t)e->nblocks * c->bs;
-            if (e->kind == KIND_OBJECT) wr64(e->b, fletcher64(e->b, len));
-            else if (e->kind == KIND_HEADERLESS) memset(e->b, 0, 32);
-            if (pwrite(c->fd, e->b, len, (off_t)(c->base + e->paddr * c->bs)) != (ssize_t)len) return werr(c, "write failed");
-            e->dirty = 0;
+            if (e->dirty && cache_write(c, e)) return werr(c, "write failed");
         }
     /* a sealed volume written to: its seal is broken (integrity_meta_phys_t: im_flags @36 |=
        APFS_SEAL_BROKEN, im_broken_xid @48), as the macOS kernel marks it, so a guest kernel that allows a
@@ -914,6 +946,7 @@ static int add_entry(ApfsVolume *v, uint64_t parent, const char *name, uint64_t 
 }
 
 int apfs_mkdir(ApfsVolume *v, uint64_t parent, const char *name, uint16_t mode, uint32_t uid, uint32_t gid, uint64_t *out) {
+    if (v->c->w && cache_trim(v->c)) return werr(v->c, "write failed");
     ChildFind f = {name, 0, 0, 0};
     if (apfs_readdir(v, parent, child_cb, &f)) return werr(v->c, "no directory %llu", (unsigned long long)parent);
     if (f.found) {
@@ -1110,6 +1143,7 @@ static int rawx_cb(const uint8_t *k, uint16_t kl, const uint8_t *val, uint16_t v
 
 int apfs_write_file(ApfsVolume *v, uint64_t parent, const char *name, const uint8_t *data, size_t len, uint16_t mode,
                     uint32_t uid, uint32_t gid) {
+    if (v->c->w && cache_trim(v->c)) return werr(v->c, "write failed");
     ChildFind f = {name, 0, 0, 0};
     if (apfs_readdir(v, parent, child_cb, &f)) return werr(v->c, "no directory %llu", (unsigned long long)parent);
     uint64_t id, alloced;
@@ -1150,6 +1184,7 @@ int apfs_write_file(ApfsVolume *v, uint64_t parent, const char *name, const uint
 
 /* An extended attribute kept in the record (up to 3804 bytes). */
 int apfs_set_xattr(ApfsVolume *v, uint64_t id, const char *name, const uint8_t *data, size_t len) {
+    if (v->c->w && cache_trim(v->c)) return werr(v->c, "write failed");
     size_t n = strlen(name) + 1;
     if (len > 3804 || n > 255) return werr(v->c, "attribute too large");
     uint8_t k[300], *val = malloc(4 + len);
@@ -1186,6 +1221,7 @@ int apfs_mkdirs(ApfsVolume *v, const char *path, uint16_t mode, uint32_t uid, ui
 /* ---- more of a file system: links, removal, renames, owners ---- */
 
 int apfs_symlink(ApfsVolume *v, uint64_t parent, const char *name, const char *target, uint32_t uid, uint32_t gid) {
+    if (v->c->w && cache_trim(v->c)) return werr(v->c, "write failed");
     ChildFind f = {name, 0, 0, 0};
     if (apfs_readdir(v, parent, child_cb, &f)) return werr(v->c, "no directory %llu", (unsigned long long)parent);
     if (f.found) return werr(v->c, "%s exists", name);
@@ -1221,6 +1257,7 @@ int apfs_readlink(ApfsVolume *v, uint64_t id, char *out, size_t len) {
 
 /* Mode and owner (and the change time). uid/gid of (uint32_t)-1 stay. */
 int apfs_chmod(ApfsVolume *v, uint64_t id, uint16_t mode, uint32_t uid, uint32_t gid) {
+    if (v->c->w && cache_trim(v->c)) return werr(v->c, "write failed");
     RawFind f;
     if (inode_raw(v, id, &f)) return werr(v->c, "no inode %llu", (unsigned long long)id);
     wr16(f.v + 80, (uint16_t)((rd16(f.v + 80) & 0170000) | (mode & 07777)));
@@ -1261,6 +1298,7 @@ static int match_inode_records(const uint8_t *k, uint16_t kl, void *ctx) {
 
 /* Removes a file, link or empty directory. */
 int apfs_unlink(ApfsVolume *v, uint64_t parent, const char *name) {
+    if (v->c->w && cache_trim(v->c)) return werr(v->c, "write failed");
     ChildFind f = {name, 0, 0, 0};
     if (apfs_readdir(v, parent, child_cb, &f)) return werr(v->c, "no directory");
     if (!f.found) return werr(v->c, "no entry %s", name);
@@ -1292,6 +1330,7 @@ int apfs_unlink(ApfsVolume *v, uint64_t parent, const char *name) {
 /* Moves an entry (any kind) to another name or directory; an existing target is replaced if it is not a
    directory. */
 int apfs_rename(ApfsVolume *v, uint64_t from_dir, const char *from, uint64_t to_dir, const char *to) {
+    if (v->c->w && cache_trim(v->c)) return werr(v->c, "write failed");
     ChildFind f = {from, 0, 0, 0};
     if (apfs_readdir(v, from_dir, child_cb, &f) || !f.found) return werr(v->c, "no entry %s", from);
     ChildFind g = {to, 0, 0, 0};
@@ -1376,6 +1415,7 @@ static int any_sibling_cb(const uint8_t *k, uint16_t kl, const uint8_t *v, uint1
 
 /* Another name, in parent, for the file `id`. */
 int apfs_link(ApfsVolume *v, uint64_t id, uint64_t parent, const char *name) {
+    if (v->c->w && cache_trim(v->c)) return werr(v->c, "write failed");
     RawFind f;
     if (inode_raw(v, id, &f)) return werr(v->c, "no inode %llu", (unsigned long long)id);
     if ((rd16(f.v + 80) & 0170000) != 0100000) return werr(v->c, "only files get hard links");
