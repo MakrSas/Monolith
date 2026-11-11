@@ -5082,11 +5082,21 @@ public enum MonolithCustomFirmware {
     public static func install(bundle: URL, resources: URL, workParent: String, environmentOnly: Bool = false) throws {
         MonolithDisk.shared.enabled = true
         VPhoneResources.monolithBase = resources
-        try VPhoneCustomFirmwareInstaller(
-            bundle: bundle,
-            resources: VPhoneResources(base: resources),
-            mode: environmentOnly ? .environmentOnly : .full,
-            workParent: workParent,
-        ).run()
+        // A failed run leaves its work folder (a disk clone and copies of the dyld cache, many GB): it goes.
+        let before = Set((try? FileManager.default.contentsOfDirectory(atPath: workParent)) ?? [])
+        do {
+            try VPhoneCustomFirmwareInstaller(
+                bundle: bundle,
+                resources: VPhoneResources(base: resources),
+                mode: environmentOnly ? .environmentOnly : .full,
+                workParent: workParent,
+            ).run()
+        } catch {
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: workParent)) ?? []
+            where name.hasPrefix("vphone-cfw.") && !before.contains(name) {
+                try? FileManager.default.removeItem(atPath: (workParent as NSString).appendingPathComponent(name))
+            }
+            throw error
+        }
     }
 }

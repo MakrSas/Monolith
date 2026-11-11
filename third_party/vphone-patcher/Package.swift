@@ -5,6 +5,7 @@ let package = Package(
     name: "VPhonePort",
     platforms: [.macOS(.v15), .iOS(.v18)],
     products: [.library(name: "FirmwarePatcher", targets: ["FirmwarePatcher"]),
+               .library(name: "VPhoneInstaller", targets: ["VPhoneInstaller"]),
                .executable(name: "monolith-fw", targets: ["monolith-fw"])],
     dependencies: [
         .package(url: "https://github.com/p-x9/MachOKit.git", exact: "0.54.1"),

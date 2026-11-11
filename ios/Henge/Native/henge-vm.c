@@ -142,7 +142,8 @@ int henge_vm_install(const char *rom, const char *disk, const char *aux, uint64_
         return failed_start();
     }
     HvVmConfig c = {.rom = rom, .disk = disk, .aux = aux, .ecid = ecid, .ram_mb = ram_mb, .ncpus = cpus, .log = 1,
-                    .installer = 1, .no_sound = 1, .jit_rx = jit->rx_addr, .jit_rw = jit->rw_addr, .jit_bytes = jit->size};
+                    .installer = 1, .no_sound = 1, .jit_rx = jit->rx_addr, .jit_rw = jit->rw_addr, .jit_bytes = jit->size,
+                    .sep_rom = sep_rom, .sep_storage = sep_storage}; /* a research-board guest's restore has its SEP */
     fprintf(stderr, "henge: installing %s with %d CPUs, %llu MB RAM\n", ipsw, cpus, (unsigned long long)ram_mb);
     if (hv_vm_create(&c, err, errlen) != 0) return failed_start();
     install_step = 0;

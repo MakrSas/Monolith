@@ -2,8 +2,12 @@ name: Henge
 options:
   bundleIdPrefix: com.monolith
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "18.0" # vphone-patcher (Mutex)
   createIntermediateGroups: true
+
+packages:
+  VPhonePatcher:
+    path: ../third_party/vphone-patcher
 
 settings:
   base:
@@ -28,6 +32,8 @@ targets:
       - path: Henge
         excludes:
           - "Resources/**"
+          - "VPhoneResources/**"
+          - "VPhoneResources"
           - "Info.plist"
           - "Henge.entitlements"
           - "Henge.personal.entitlements"
@@ -35,6 +41,12 @@ targets:
           - "AppIcon.icon"
       - path: Henge/Resources
         buildPhase: resources
+      # vphone-cli's guest resources (vphoned, its libraries, patch presets, kernel recipes, OpenAVB and OpenSEP),
+      # as a folder: scripts/package_ipa.sh copies them from vphone's bundle.
+      - path: Henge/VPhoneResources
+        type: folder
+        buildPhase: resources
+        optional: true
       # Icon Composer's document: the app icon, which iOS renders in Liquid Glass.
       # TEMPORARY: off while Xcode 27.1's actool crashes (SIGBUS in ImageIO) on any image;
       # flat PNGs in Henge/Resources + CFBundleIcons in Info.plist stand in. Revert both.
@@ -90,6 +102,9 @@ targets:
           - "-framework"
           - "CoreFoundation"
     dependencies:
+      # vphone-cli's firmware patchers and installer (third_party/vphone-patcher): devices other than a Mac.
+      - package: VPhonePatcher
+        product: VPhoneInstaller
       # Built-in StikJIT's debugger process. Embedded into PlugIns/.
       - target: HengeJITHelper
     preBuildScripts:

@@ -13,6 +13,15 @@ OUT="$HOME/Desktop/Monolith.ipa"
 [ "$TROLLSTORE" = true ] && OUT="$HOME/Desktop/Monolith.tipa"
 [ -d "$IOS/deps/StikJIT.xcframework" ] || "$IOS/scripts/fetch_deps.sh"
 cd "$IOS"
+# vphone-cli's guest resources, for installing devices other than a Mac (VPHONE_RESOURCES: vphone's Contents/Resources).
+VR="${VPHONE_RESOURCES:-$HOME/Documents/Coding/vphone/VPhone.bundle/Contents/Resources}"
+if [ -d "$VR/guest-resources" ]; then
+    mkdir -p "$IOS/Henge/VPhoneResources"
+    rsync -a --delete --delete-excluded --exclude '*.lproj' --exclude 'GhosttyKit_*' --exclude 'Licenses' "$VR/" "$IOS/Henge/VPhoneResources/"
+else
+    echo "warning: no vphone resources at $VR: devices other than a Mac cannot be installed" >&2
+    mkdir -p "$IOS/Henge/VPhoneResources"
+fi
 xcodegen generate >/dev/null
 DD="$IOS/build/DerivedData"
 mkdir -p "$IOS/build"

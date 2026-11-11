@@ -1,3 +1,4 @@
 build/
 third_party/vphone-patcher/.build/
 third_party/vphone-patcher/.swiftpm/
+ios/Henge/VPhoneResources/
