@@ -21,6 +21,13 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Leviidev/Henge?style=flat-square&color=2E6BFF&labelColor=111111" alt="GPL-2.0-or-later"></a>
 </p>
 
+> **Monolith** is a fork of Henge that also runs Apple's other devices, made the way
+> [vphone](https://github.com/Lakr233/vphone-cli) makes them on a Mac, on the iPhone and iPad.
+> Beta 0.3.0: **HomePod mini and HomeView install right on the phone, no Mac needed** (Install tab).
+> Apple Watch, Apple TV and iPhone guests made in vphone on a Mac can be moved to the phone:
+> [docs/vphone-transfer.md](docs/vphone-transfer.md). Releases: [MakrSas/Monolith](https://github.com/MakrSas/Monolith/releases).
+> Everything below about macOS is Henge's and still applies.
+
 Download macOS, install it on the device, and use it.
 
 - **Own emulator** — iOS gives apps no hypervisor, so Henge runs the Mac's arm64 code through its own JIT, with its own MMU and devices. It doesn't use QEMU or Virtualization.framework.
