@@ -732,3 +732,66 @@ void hv_pvg_window_run(void) {
         [app run];
     }
 }
+
+/* --window with --phone: the lightweight device's frames (what Monolith shows on iOS) in a window,
+   refreshed from its newest frame thirty times a second. */
+#include "pvg_lite.h"
+static HvPvgLite *lite_for_window;
+static CALayer *lite_layer;
+static int (*lite_boot_display)(const uint8_t **, uint32_t *, uint32_t *, uint32_t *);
+
+@interface HVLiteTicker : NSObject
+- (void)tick:(NSTimer *)t;
+@end
+@implementation HVLiteTicker
+- (void)tick:(NSTimer *)t {
+    (void)t;
+    const uint8_t *px; uint32_t w, h, stride = 0;
+    /* the guest's drawing once it has drawn; before that the boot framebuffer (the Apple logo) */
+    if (!lite_for_window || hv_pvg_lite_frame(lite_for_window, &px, &w, &h) || !w || !h) {
+        if (!lite_boot_display || lite_boot_display(&px, &w, &h, &stride) || !w || !h) return;
+    }
+    if (!stride) stride = w * 4;
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGContextRef ctx = CGBitmapContextCreate((void *)px, w, h, 8, stride, cs,
+                                             kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+    CGImageRef img = ctx ? CGBitmapContextCreateImage(ctx) : NULL;
+    if (img) {
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        lite_layer.contents = (__bridge id)img;
+        [CATransaction commit];
+        CGImageRelease(img);
+    }
+    if (ctx) CGContextRelease(ctx);
+    CGColorSpaceRelease(cs);
+}
+@end
+
+void hv_pvg_lite_window_run(HvPvgLite *p, unsigned width, unsigned height,
+                            int (*boot_display)(const uint8_t **, uint32_t *, uint32_t *, uint32_t *)) {
+    lite_for_window = p;
+    lite_boot_display = boot_display;
+    [NSApplication sharedApplication]; /* before -run: NSApp is nil until this */
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSRect frame = NSMakeRect(0, 0, width ? width : 640, height ? height : 640);
+        NSWindow *w = [[NSWindow alloc] initWithContentRect:frame
+                                                  styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable
+                                                    backing:NSBackingStoreBuffered defer:NO];
+        w.title = @"hengevm";
+        NSView *v = [[NSView alloc] initWithFrame:frame];
+        v.wantsLayer = YES;
+        lite_layer = v.layer;
+        lite_layer.backgroundColor = CGColorGetConstantColor(kCGColorBlack);
+        lite_layer.contentsGravity = kCAGravityResizeAspect;
+        w.contentView = v;
+        [w center];
+        [w makeKeyAndOrderFront:nil];
+        [NSApp activateIgnoringOtherApps:YES];
+        static HVLiteTicker *ticker;
+        ticker = [HVLiteTicker new];
+        [NSTimer scheduledTimerWithTimeInterval:1.0 / 30 target:ticker selector:@selector(tick:) userInfo:nil repeats:YES];
+    });
+    [NSApp run];
+}

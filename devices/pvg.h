@@ -16,6 +16,10 @@ int hv_pvg_attach(HvVmapple *b, const char *screenshot);
 /* Main thread, instead of its run loop: a window showing the display, with the
    host keyboard and mouse going to the guest's virtio-input devices. Does not return. */
 void hv_pvg_window_run(void);
+struct HvPvgLite;
+/* --window with --phone: the lightweight device's frames in a window (runs the app; does not return). */
+void hv_pvg_lite_window_run(struct HvPvgLite *p, unsigned width, unsigned height,
+                            int (*boot_display)(const uint8_t **, uint32_t *, uint32_t *, uint32_t *));
 
 /* Called from the CPU thread: delivers interrupts the framework raised. */
 void hv_pvg_poll(void);

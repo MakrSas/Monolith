@@ -956,6 +956,14 @@ static void *cpu_thread(void *unused) {
     return NULL;
 }
 
+/* --phone --window: the boot framebuffer until the guest draws through the device. */
+static int boot_display_for_window(const uint8_t **px, uint32_t *w, uint32_t *h, uint32_t *stride) {
+    HvBootDisplay bd;
+    if (hv_vm_boot_display(&bd)) return -1;
+    *px = bd.pixels; *w = bd.width; *h = bd.height; *stride = bd.stride;
+    return 0;
+}
+
 static void usage(void) {
     fprintf(stderr, "usage: hengevm --rom FILE --disk FILE --aux FILE --ecid N [--seed N] [--ram MB] [--log N] [--trace 1] [--screenshot PNG] [--watch VA] [--stats SECONDS [--profile 1]] [--cpus N] [--window] [--no-pvg] [--no-chain] [--break PC [--break-hits N]] [--dump PA LEN FILE] [--aux-offset BYTES] [--install IPSW]\n");
     exit(2);
@@ -1095,6 +1103,8 @@ int main(int argc, char **argv) {
     run_args = (RunArgs){brk, brk_hits, dump_pa, dump_len, dump_path};
     /* The CPU runs on its own thread: the graphics framework needs the main queue. */
     hv_vm_start(0, NULL); /* the other CPUs and the kicker; CPU 0 is cpu_thread, for --break */
+    if (getenv("HV_AGENT_PORT")) /* debugging: the guest agent (vphoned, vsock 1339) on 127.0.0.1:PORT, as the iOS app has it */
+        hv_vm_vsock_forward(atoi(getenv("HV_AGENT_PORT")), 1339);
     pthread_t t;
     pthread_attr_t attr;
     pthread_attr_init(&attr);
@@ -1127,6 +1137,7 @@ int main(int argc, char **argv) {
         pthread_create(&ty, NULL, type_thread, NULL);
     }
     if (window && use_pvg) hv_pvg_window_run();
+    if (window && !use_pvg && board.pvg) hv_pvg_lite_window_run(board.pvg, 0, 0, boot_display_for_window);
     CFRunLoopRun();
     return 0;
 }

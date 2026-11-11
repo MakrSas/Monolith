@@ -75,7 +75,7 @@ struct InstallView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
                 targetButton("mac", "Mac", "desktopcomputer")
-                ForEach(GuestKind.all) { kind in targetButton(kind.id, kind.title, kind.symbol) }
+                ForEach(GuestKind.all) { kind in targetButton(kind.id, kind.title, kind.symbol, enabled: kind.available) }
             }
             .padding(.horizontal, 2)
             .padding(.vertical, 6)
@@ -83,8 +83,8 @@ struct InstallView: View {
         .padding(.bottom, 4)
     }
 
-    private func targetButton(_ id: String, _ title: String, _ symbol: String) -> some View {
-        Button { target = id } label: {
+    private func targetButton(_ id: String, _ title: String, _ symbol: String, enabled: Bool = true) -> some View {
+        Button { if enabled { target = id } } label: {
             VStack(spacing: 6) {
                 Image(systemName: symbol).font(.system(size: 24, weight: .regular)).frame(height: 30)
                 Text(title).font(.system(size: 12, weight: .medium)).lineLimit(1)
@@ -94,8 +94,17 @@ struct InstallView: View {
             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(target == id ? Desk.card : Color.clear))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(target == id ? Desk.accentLight : Desk.hairline, lineWidth: target == id ? 1.5 : 0.5))
+            .overlay(alignment: .topTrailing) {
+                if !enabled {
+                    Text("Soon").font(.system(size: 9, weight: .bold)).foregroundStyle(Desk.dim)
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(Capsule().fill(Desk.card)).padding(5)
+                }
+            }
+            .opacity(enabled ? 1 : 0.4)
         }
         .buttonStyle(.plain)
+        .disabled(!enabled)
     }
 
     @ViewBuilder private var chooser: some View {

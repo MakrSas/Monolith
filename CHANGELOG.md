@@ -25,6 +25,26 @@ Every change keeps its original author in the git history.
   trackpad). The report format follows the Linux kernel's `hid-magicmouse` MT2 support and
   VoodooInput's Magic Trackpad II emulation.
 
+## 0.3.0 (110) — beta: HomePod mini and HomeView on the phone
+
+Installed entirely on the iPhone or iPad, with no Mac: Install > HomePod mini or HomeView downloads
+Apple's firmware, patches the boot chain, restores it in Monolith's own engine and installs vphone's
+system additions into the disk image.
+
+- vphone's firmware pipeline (prepare, patch, restore, CFW install) runs in the app: the macOS tools
+  it called (diskutil, mount_apfs, aa, codesign, lsof) are answered by Monolith's own code, including
+  a clean-room APFS reader and writer (`apfs/`).
+- The GPU driver HomeView needs is taken from a cloudOS restored in a temporary machine on the device.
+- Download progress with size, speed and time left; a failed install keeps the restored device and
+  offers "Retry the last steps" (also after the app is closed).
+- Settings > Storage lists every file and machine in the app, with sizes, to delete.
+- HomeView and watch guests get an Apps button (open any app, Settings included); first-start setup
+  is skipped through the guest agent.
+- Fixes: USB packets were dropped under load (stalled restores); a kernel patch kept a copy of the
+  kernelcache per patch (killed by memory pressure); the installer's disk cache is bounded.
+
+Not yet: Apple Watch, Apple TV and iPhone guests.
+
 ## 0.2.0 (100)
 
 Based on upstream `main` at b744a78.
