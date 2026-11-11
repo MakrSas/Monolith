@@ -32,6 +32,7 @@ struct InstallView: View {
                         if !installer.busy { targetPicker }
                         if target == "mac" { chooser } else if let kind = GuestKind.all.first(where: { $0.id == target }) {
                             DeviceChooser(kind: kind, jitReady: jitReady)
+                                .id(kind.id) // a new chooser per device: its versions and name are that device's
                         }
                     case .checking:
                         ProgressView("Preparing to install macOS…")
@@ -409,7 +410,6 @@ private struct DeviceChooser: View {
                 .font(.system(size: 13)).foregroundStyle(Desk.dim).multilineTextAlignment(.center).padding(.top, 10)
         }
         .onAppear { load() }
-        .onChange(of: kind) { _ in load() }
     }
 
     private func load() {
