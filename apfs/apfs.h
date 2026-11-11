@@ -82,6 +82,7 @@ int apfs_link(ApfsVolume *v, uint64_t id, uint64_t parent, const char *name);
    what does not in *bad_info, *bad_nodes; the recomputed root hash in root_hash). Reseal (writable):
    rebuilds them all after writes, clears the broken flag; the new root hash in root_hash. */
 int apfs_seal_check(ApfsVolume *v, uint8_t root_hash[32], uint64_t *bad_info, uint64_t *bad_nodes, uint64_t *streams);
+int apfs_reseal(ApfsVolume *v, uint8_t root_hash[32]);
 /* One entry of a directory by name, and all of them (*out malloc'd). */
 int apfs_child(ApfsVolume *v, uint64_t dir, const char *name, uint64_t *id, uint16_t *type);
 int apfs_list(ApfsVolume *v, uint64_t dir, ApfsDirEntry **out, size_t *count);

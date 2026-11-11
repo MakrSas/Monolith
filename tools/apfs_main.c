@@ -74,6 +74,18 @@ int main(int argc, char **argv) {
         printf("\n%s\n", r == 0 ? "sealed" : r > 0 ? "NOT sealed" : "error");
         return r ? 1 : 0;
     }
+    if (!strcmp(argv[3], "reseal")) { /* reseal: seal a written sealed volume again */
+        int idx = atoi(argv[2]);
+        apfs_close(c);
+        c = apfs_open_rw(argv[1], err, sizeof err);
+        if (!c) { fprintf(stderr, "apfs: %s\n", err); return 1; }
+        uint8_t h[32];
+        if (apfs_reseal(apfs_volume(c, idx), h) || apfs_commit(c)) { fprintf(stderr, "apfs: reseal failed: %s\n", apfs_error(c)); return 1; }
+        printf("root ");
+        for (int i = 0; i < 32; i++) printf("%02x", h[i]);
+        printf("\n");
+        return 0;
+    }
     if (!strcmp(argv[3], "mkdir") || !strcmp(argv[3], "put") || !strcmp(argv[3], "rm") || !strcmp(argv[3], "ln") ||
         !strcmp(argv[3], "mv") || !strcmp(argv[3], "chmod") || !strcmp(argv[3], "link")) {
         apfs_close(c);

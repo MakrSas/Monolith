@@ -363,6 +363,7 @@ static int raw_fs(const uint8_t *a, uint16_t al, const uint8_t *b, uint16_t bl, 
         return strcmp((const char *)a + 10, (const char *)b + 10);
     case APFS_TYPE_FILE_EXTENT:
     case 5:  /* SIBLING_LINK */
+    case 13: /* FILE_INFO */
         if (al >= 16 && bl >= 16) return cmp_u64(rd64(a + 8), rd64(b + 8));
         return 0;
     default:
@@ -675,7 +676,7 @@ int apfs_commit(ApfsContainer *c) {
        broken seal stops checking the tree's hashes instead of refusing the volume */
     for (int i = 0; i < c->nvol; i++) {
         ApfsVolume *v = &c->vol[i];
-        if (!v->fs_written || !(v->incompat & APFS_INCOMPAT_SEALED_VOLUME)) continue;
+        if (!v->fs_written || v->resealed || !(v->incompat & APFS_INCOMPAT_SEALED_VOLUME)) continue;
         uint8_t sb[65536];
         uint64_t im = 0, p;
         if (!read_block(c, v->sb_paddr, sb)) im = rd64(sb + 1024);
@@ -795,6 +796,7 @@ static int name_hash(ApfsVolume *v, const char *name, uint32_t *hash) {
 
 static WTree fs_wtree(ApfsVolume *v) {
     v->fs_written = 1;
+    v->resealed = 0; /* a write after a reseal breaks it again */
     uint8_t b[65536];
     Tree rt = {v->c, v->root_tree, !v->root_physical, v->omap_root, 0, 0, NULL, NULL, 0};
     uint16_t flags = tree_node(&rt, v->root_tree, b) ? 0 : rd16(b + 32);

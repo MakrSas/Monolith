@@ -57,7 +57,8 @@ struct ApfsVolume {
     uint64_t incompat, fs_flags;
     uint16_t role;
     char name[257];
-    int hashed_names;                     /* directory records keyed by name hash */
+    int hashed_names;
+    int resealed;                         /* apfs_reseal ran after the last write: the seal holds */                     /* directory records keyed by name hash */
     uint64_t xid;                         /* the state looked at: the container's, or a snapshot's */
     uint64_t snap_meta;                   /* physical: the snapshot metadata tree */
     /* writing */

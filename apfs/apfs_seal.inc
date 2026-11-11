@@ -190,6 +190,7 @@ static int seal_node(ApfsVolume *v, WTree *wt, const Tree *t, uint64_t oid, uint
     node_parse(c, b, &n);
     if (!(n.flags & BTNODE_HASHED)) { free(b); return -1; }
     if (n.level) {
+        int changed = 0;
         for (uint32_t i = 0; i < n.nkeys; i++) {
             const uint8_t *k, *val; uint16_t kl, vl;
             node_entry(&n, i, t->fixed_k, t->fixed_v, &k, &kl, &val, &vl);
@@ -198,10 +199,11 @@ static int seal_node(ApfsVolume *v, WTree *wt, const Tree *t, uint64_t oid, uint
             if (seal_node(v, wt, t, rd64(val) + t->root, h, sn, depth + 1)) { free(b); return -1; }
             if (memcmp(val + 8, h, 32)) {
                 sn->bad++;
+                changed = 1;
                 if (!sn->verify) memcpy((uint8_t *)val + 8, h, 32);
             }
         }
-        if (!sn->verify) {
+        if (!sn->verify && changed) {
             /* the node as it will be written: into the cache, its header zero (headerless) */
             uint8_t *w = wnode(wt, oid);
             if (!w) { free(b); return -1; }
@@ -282,4 +284,94 @@ int apfs_seal_check(ApfsVolume *v, uint8_t root_hash[32], uint64_t *bad_info, ui
     }
     free(im);
     return r;
+}
+
+static int match_file_info(const uint8_t *k, uint16_t kl, void *ctx) {
+    (void)kl;
+    uint64_t h = rd64(k);
+    return (h & OBJ_ID_MASK) == *(uint64_t *)ctx && (uint8_t)(h >> OBJ_TYPE_SHIFT) == APFS_TYPE_FILE_INFO;
+}
+
+static int seal_drop_infos(WTree *t, uint64_t id) {
+    uint8_t from[16];
+    wr64(from, id | (uint64_t)APFS_TYPE_FILE_INFO << OBJ_TYPE_SHIFT);
+    wr64(from + 8, 0);
+    return wdelete(t, from, 16, match_file_info, &id) < 0 ? -1 : 0;
+}
+
+/* Seals a written sealed volume again: FILE_INFO records for every stream as its data now is, every node
+   hash, the root hash into its integrity metadata, the broken flag off. Run after the last write, before
+   apfs_commit. The boot chain's root_hash (isys) must then name root_hash. */
+int apfs_reseal(ApfsVolume *v, uint8_t root_hash[32]) {
+    ApfsContainer *c = v->c;
+    if (!c->w || !(v->incompat & APFS_INCOMPAT_SEALED_VOLUME)) return -1;
+    SealScan s = {0};
+    Tree t = fs_tree(v);
+    if (tree_walk(&t, NULL, seal_scan_cb, &s) < 0 || s.err) { free(s.s); free(s.f); return werr(c, "reseal: cannot scan the volume"); }
+    qsort(s.s, s.ns, sizeof *s.s, seal_cmp_stream);
+    qsort(s.f, s.nf, sizeof *s.f, seal_cmp_info);
+    WTree wt = fs_wtree(v);
+    SealExtents x = {0};
+    size_t fi = 0;
+    uint64_t rewritten = 0;
+    int r = 0;
+    for (size_t i = 0; i < s.ns && !r; i++) {
+        if (!s.s[i].id || (i && s.s[i].id == s.s[i - 1].id)) continue;
+        while (fi < s.nf && s.f[fi].id < s.s[i].id) { /* records of a stream that is gone */
+            uint64_t id = s.f[fi].id;
+            if (seal_drop_infos(&wt, id)) { r = -1; break; }
+            while (fi < s.nf && s.f[fi].id == id) fi++;
+        }
+        if (r) break;
+        SealInfo *want; size_t n;
+        if (seal_stream_infos(v, &s.s[i], &x, &want, &n)) { r = werr(c, "reseal: cannot read stream %llu", (unsigned long long)s.s[i].id); break; }
+        size_t have = fi;
+        while (have < s.nf && s.f[have].id == s.s[i].id) have++;
+        int same = have - fi == n;
+        for (size_t j = 0; same && j < n; j++)
+            same = s.f[fi + j].off == want[j].off && s.f[fi + j].blocks == want[j].blocks && !memcmp(s.f[fi + j].hash, want[j].hash, 32);
+        if (!same) {
+            rewritten++;
+            if (have > fi && seal_drop_infos(&wt, s.s[i].id)) r = -1;
+            for (size_t j = 0; j < n && !r; j++) {
+                uint8_t k[16], val[35];
+                wr64(k, want[j].id | (uint64_t)APFS_TYPE_FILE_INFO << OBJ_TYPE_SHIFT);
+                wr64(k + 8, (uint64_t)1 << 56 | want[j].off);
+                wr16(val, want[j].blocks);
+                val[2] = 32;
+                memcpy(val + 3, want[j].hash, 32);
+                if (winsert(&wt, k, 16, val, 35, 1)) r = -1;
+            }
+        }
+        fi = have;
+        free(want);
+    }
+    while (!r && fi < s.nf) {
+        uint64_t id = s.f[fi].id;
+        if (seal_drop_infos(&wt, id)) r = -1;
+        while (fi < s.nf && s.f[fi].id == id) fi++;
+    }
+    free(x.e); free(s.s); free(s.f);
+    if (r) return -1;
+    if (debug_on()) fprintf(stderr, "apfs: reseal %s: %llu stream(s) hashed again\n", v->name, (unsigned long long)rewritten);
+
+    t = fs_tree(v);
+    wt = fs_wtree(v);
+    SealNodes sn = {0, 0};
+    uint8_t h[32];
+    if (seal_node(v, &wt, &t, t.root, h, &sn, 0)) return werr(c, "reseal: cannot hash the tree");
+    uint64_t p;
+    uint8_t *im = malloc(c->bs);
+    if (!im || seal_im(v, &p, im)) { free(im); return werr(c, "reseal: no integrity metadata"); }
+    free(im);
+    uint8_t *b = cache_get(c, p, 1, 1, KIND_OBJECT);
+    if (!b) return -1;
+    uint32_t off = rd32(b + 44);
+    if (off + 32 > c->bs || rd32(b + 40) != 1 /* SHA-256 */) return werr(c, "reseal: unsupported integrity metadata");
+    memcpy(b + off, h, 32);
+    wr32(b + 36, rd32(b + 36) & ~1u);
+    wr64(b + 48, 0);
+    v->resealed = 1;
+    if (root_hash) memcpy(root_hash, h, 32);
+    return 0;
 }
