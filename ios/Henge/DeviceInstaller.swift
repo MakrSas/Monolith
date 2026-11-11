@@ -16,12 +16,14 @@ struct GuestKind: Identifiable, Hashable {
 
     static let all: [GuestKind] = [
         GuestKind(id: "AudioAccessory5,1", title: "HomePod mini", symbol: "homepodmini", preset: "homepod-mini", ramMB: 2048, note: nil),
-        GuestKind(id: "Watch7,18", title: "Apple Watch", symbol: "applewatch", preset: "watchos", ramMB: 2048,
-                  note: "Installed this way on a Mac; not tried from the phone yet."),
+        GuestKind(id: "HomeAccessory17,1", title: "HomeView", symbol: "homekit", preset: "homeview", ramMB: 3072,
+                  note: "Installed the HomePod's way (restore, then vphone's installer); not tried yet."),
         GuestKind(id: "AppleTV14,1", title: "Apple TV 4K", symbol: "appletv", preset: "tvos", ramMB: 3072,
-                  note: "Installed this way on a Mac; not tried from the phone yet."),
+                  note: "Installed the HomePod's way (restore, then vphone's installer); not tried yet."),
         GuestKind(id: "iPhone17,3", title: "iPhone", symbol: "iphone", preset: "standard", ramMB: 4096,
                   note: "Not yet: its GPU driver comes from a cloudOS restore Monolith cannot do yet."),
+        GuestKind(id: "Watch7,18", title: "Apple Watch", symbol: "applewatch", preset: "watchos", ramMB: 2048,
+                  note: "Not yet: vphone builds the watch's system image before the restore, which needs mounting and resealing."),
     ]
 }
 
