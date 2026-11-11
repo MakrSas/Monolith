@@ -276,9 +276,24 @@ public enum VPhonePCCGPURecovery {
         let image = try VPhoneAPFSImage(disk, writable: false)
         let source = try image.volume(named: "System").directory("System/Library/Extensions/\(VPhonePCCGPUDriver.name)")
         let host = work.appending(path: VPhonePCCGPUDriver.name)
-        try VPhoneConfinedDirectory(root: work.path).copyTree(from: source, to: VPhonePCCGPUDriver.name, clearSetID: true)
+        try copyOut(source, to: host) // data and modes only: an app can give nothing root's owner or flags
         try VPhonePCCGPUDriver.stage(from: host, into: restoreDirectory, expectedPlatformVersion: expectedPlatformVersion)
         print("[+] GPU driver taken from the restored cloudOS")
+    }
+
+    private static func copyOut(_ dir: VPhoneConfinedDirectory, to url: URL) throws {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        for name in try dir.entries() {
+            guard let s = try dir.status(name) else { continue }
+            let target = url.appending(path: name)
+            switch s.st_mode & S_IFMT {
+            case S_IFDIR: try copyOut(try dir.directory(name), to: target)
+            case S_IFLNK: if let link = try dir.readLink(name) { try FileManager.default.createSymbolicLink(atPath: target.path, withDestinationPath: link) }
+            default:
+                try dir.readData(name).write(to: target)
+                chmod(target.path, (s.st_mode & 0o777) | 0o600)
+            }
+        }
     }
 
     /// As vphone's: the temporary VM reports iPhone99,11, which later cloudOS manifests leave out.

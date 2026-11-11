@@ -496,7 +496,8 @@ public enum FirmwarePatchSetCatalog {
         selection: .allow(
             minimalBootChainPatches
                 .union(watchOSDeviceTreePatches)
-                .union(FirmwareResearchBoardPatchSet.manifest.patches.map(\.identifier)),
+                .union(FirmwareResearchBoardPatchSet.manifest.patches.map(\.identifier))
+                .union([FirmwareRestoreImagePatchSet.gpuDriver]), // prepare stages the driver; Monolith installs it
         ),
     )
 
