@@ -116,7 +116,7 @@ final class JITCoordinator: ObservableObject {
     private init() {
         method = UserDefaults.standard.string(forKey: "henge.jitMethod")
             .flatMap(JITMethod.init(rawValue:)) ?? .automatic
-        pathMonitor.start(queue: DispatchQueue(label: "com.henge.app.jit-path", qos: .utility))
+        pathMonitor.start(queue: DispatchQueue(label: "com.monolith.app.jit-path", qos: .utility))
     }
 
     var resolvedMethod: JITMethod {
@@ -534,7 +534,7 @@ enum LocalDevVPN {
 /// Built-in StikJIT keeps working after the device restarts.
 enum RemotePairingPortDiscovery {
     private static let serviceType = "_remotepairing._tcp"
-    private static let queue = DispatchQueue(label: "com.henge.app.remotepairing-discovery", qos: .utility)
+    private static let queue = DispatchQueue(label: "com.monolith.app.remotepairing-discovery", qos: .utility)
     private static let lock = NSLock()
     private static var cachedPort: UInt16?
     private static var lastFailure: Date?

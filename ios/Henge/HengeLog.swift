@@ -20,7 +20,7 @@ import os
 /// translating" is preserved, which is exactly the ordering that matters when
 /// something goes wrong.
 enum HengeLog {
-    private static let osLog = Logger(subsystem: "com.henge.app", category: "henge")
+    private static let osLog = Logger(subsystem: "com.monolith.app", category: "henge")
 
     /// Exposed because a C signal handler closure cannot capture context.
     fileprivate static var rawLogFD: Int32 { logFD }
@@ -198,7 +198,7 @@ enum HengeLog {
                 }
             }
         }
-        t.name = "com.henge.log.reader"
+        t.name = "com.monolith.log.reader"
         t.qualityOfService = .userInitiated
         t.start()
     }

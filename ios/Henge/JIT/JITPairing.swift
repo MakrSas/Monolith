@@ -30,7 +30,7 @@ import UserNotifications
     static let shared = OnDevicePairing()
 
     /// Shown on the iPhone as "Pair with Monolith"; the host identifier is derived from it.
-    static let hostName = "Henge"
+    static let hostName = "Monolith"
     static let timeout: TimeInterval = 300
 
     enum Phase: Equatable {
@@ -331,7 +331,7 @@ import UserNotifications
         content.title = title
         content.body = body
         content.sound = .default
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "henge.pairing.\(UUID().uuidString)",
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "monolith.pairing.\(UUID().uuidString)",
                                                                      content: content, trigger: nil))
     }
 }

@@ -24,7 +24,7 @@ private let CS_DEBUGGED = UInt32(0x10000000)
 /// Monolith's own built-in StikJIT helper (JITSetup.swift), which runs the same
 /// script from an app extension.
 enum JITBootstrap {
-    private static let log = Logger(subsystem: "com.henge.app", category: "jit")
+    private static let log = Logger(subsystem: "com.monolith.app", category: "jit")
 
     enum State: Equatable {
         case unknown
