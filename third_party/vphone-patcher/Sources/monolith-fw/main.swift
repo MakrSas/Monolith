@@ -21,6 +21,10 @@ if args.count >= 4, args[1] == "restored-system" {
         try MonolithRestoredSystem.install(vm: URL(fileURLWithPath: args[2]))
     }
 }
+/// monolith-fw rename-snapshot DISK.img: the root snapshot set aside, so the live (resealed) volume boots.
+if args.count >= 3, args[1] == "rename-snapshot" {
+    command { try VPhoneAPFSSnapshot.rename(imageAt: URL(fileURLWithPath: args[2])) }
+}
 /// monolith-fw aea-key FILE.aea: the image's symmetric key (fetched as vphone does), for `aea decrypt -key-value`.
 if args.count >= 3, args[1] == "aea-key" {
     command {

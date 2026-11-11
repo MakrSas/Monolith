@@ -71,6 +71,9 @@ public enum MonolithRestoredSystem {
         }
         guard updated > 0 else { throw Failure(description: "No boot root_hash in Preboot to give the new seal.") }
         try image.commit()
+        // iBoot boots the snapshot named after the root hash it is given; the restore's names the old one.
+        // Set aside, the live volume boots, which the kernel checks against the new root hash.
+        try VPhoneAPFSSnapshot.rename(imageAt: vm.appendingPathComponent("Disk.img"))
         print("[monolith] System sealed again; Preboot updated (\(updated))")
     }
 }

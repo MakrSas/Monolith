@@ -64,7 +64,13 @@ static void drain_responses(HvVirtioUsb *d) {
     HvVirtio *v = &d->vio;
     static HvVirtqElem e;
     int any = 0;
-    while (hv_virtq_pop(v, RSPQ, &e) > 0) {
+    for (;;) {
+        /* Backpressure, never loss: with no room for another response the guest's buffer stays queued
+           (usbmux has no retransmission; a dropped packet stalls its stream for good). */
+        pthread_mutex_lock(&d->mu);
+        int room = d->in_tail - d->in_head < HV_VUSB_RING;
+        pthread_mutex_unlock(&d->mu);
+        if (!room || hv_virtq_pop(v, RSPQ, &e) <= 0) break;
         uint32_t total = 0;
         for (int s = 0; s < e.nseg; s++)
             if (!e.seg[s].write) total += e.seg[s].len;
@@ -218,8 +224,10 @@ int hv_vusb_recv(HvVirtioUsb *d, uint8_t ep, HvVusbMsg *out, int timeout_ms) {
             if (ep == 0xff || m->ep == ep || m->type == HV_VUSB_RSP_RESET) {
                 *out = *m;
                 for (uint32_t j = i; j != d->in_head; j--) d->in[j % HV_VUSB_RING] = d->in[(j - 1) % HV_VUSB_RING];
+                int was_full = d->in_tail - d->in_head == HV_VUSB_RING;
                 d->in_head++;
                 pthread_mutex_unlock(&d->mu);
+                if (was_full) hv_machine_wake(d->vio.m); /* responses held back in the guest can come now */
                 return 1;
             }
         }
