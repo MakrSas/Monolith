@@ -1,4 +1,3 @@
-#if os(macOS) // MONOLITH: not built for iOS (the patchers do not use it)
 import Foundation
 
 // MARK: - VPhoneFirmwarePickerError
@@ -169,4 +168,3 @@ public enum VPhoneFirmwarePicker {
     }
 }
 
-#endif // MONOLITH

@@ -1,4 +1,3 @@
-#if os(macOS) // MONOLITH: not built for iOS (the patchers do not use it)
 import Foundation
 
 // MARK: - VPhoneFirmwareSupport
@@ -509,4 +508,3 @@ public enum VPhoneFirmwareMatrixCommandLine {
     }
 }
 
-#endif // MONOLITH

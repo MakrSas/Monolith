@@ -1,4 +1,3 @@
-#if os(macOS) // MONOLITH: not built for iOS (the patchers do not use it)
 import Foundation
 
 // MARK: - Machine
@@ -1215,4 +1214,3 @@ public extension VPhoneMachineTemplates {
 }
 
 
-#endif // MONOLITH

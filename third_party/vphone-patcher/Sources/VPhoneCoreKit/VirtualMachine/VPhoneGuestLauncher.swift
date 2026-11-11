@@ -1,4 +1,3 @@
-#if os(macOS) // MONOLITH: not built for iOS (the patchers do not use it)
 import Foundation
 import Security
 
@@ -171,6 +170,9 @@ public struct VPhoneGuestLaunchPlanner: Sendable {
     /// `nil` means the binary could not be read or is unsigned; the caller
     /// then tells the user how to obtain the hash instead of inventing one.
     static func codeDirectoryHash(of binary: URL) -> String? {
+        #if !os(macOS) // MONOLITH: no code-signing services on iOS
+        return nil
+        #else
         var code: SecStaticCode?
         guard SecStaticCodeCreateWithPath(binary as CFURL, [], &code) == errSecSuccess,
               let code
@@ -181,7 +183,7 @@ public struct VPhoneGuestLaunchPlanner: Sendable {
               let hash = entries[kSecCodeInfoUnique as String] as? Data
         else { return nil }
         return hash.map { String(format: "%02x", $0) }.joined()
+        #endif
     }
 }
 
-#endif // MONOLITH

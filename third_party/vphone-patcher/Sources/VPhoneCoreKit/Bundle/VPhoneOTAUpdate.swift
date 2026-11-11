@@ -1,4 +1,3 @@
-#if os(macOS) // MONOLITH: not built for iOS (the patchers do not use it)
 import Darwin
 import Foundation
 
@@ -304,4 +303,3 @@ public enum VPhoneOTAUpdate {
 }
 
 
-#endif // MONOLITH

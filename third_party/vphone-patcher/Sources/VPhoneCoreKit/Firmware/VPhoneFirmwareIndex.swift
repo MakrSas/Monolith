@@ -1,4 +1,3 @@
-#if os(macOS) // MONOLITH: not built for iOS (the patchers do not use it)
 // VPhoneFirmwareIndex.swift — where a restore image can be downloaded from.
 //
 // Two questions used to need two external programs:
@@ -219,4 +218,3 @@ public enum VPhoneFirmwareIndex {
     }
 }
 
-#endif // MONOLITH

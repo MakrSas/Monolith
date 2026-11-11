@@ -1,4 +1,3 @@
-#if os(macOS) // MONOLITH: not built for iOS (the patchers do not use it)
 import Foundation
 
 public enum VPhoneVirtualMachinePickerError: Error, CustomStringConvertible, Equatable {
@@ -66,4 +65,3 @@ public enum VPhoneVirtualMachinePicker {
 }
 
 
-#endif // MONOLITH
